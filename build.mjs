@@ -29,6 +29,9 @@ const routeFiles = [
   "manifest.webmanifest",
   "sw.js",
   "assets/app-icon.svg",
+  "assets/app-icon-180.png",
+  "assets/app-icon-192.png",
+  "assets/app-icon-512.png",
   "assets/ops-map.svg"
 ];
 
@@ -37,7 +40,8 @@ const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".webmanifest": "application/manifest+json; charset=utf-8",
-  ".svg": "image/svg+xml; charset=utf-8"
+  ".svg": "image/svg+xml; charset=utf-8",
+  ".png": "image/png"
 };
 
 const assets = {};

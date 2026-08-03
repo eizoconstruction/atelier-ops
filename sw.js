@@ -1,4 +1,4 @@
-const CACHE_NAME = "atelier-ops-v7";
+const CACHE_NAME = "atelier-ops-v8";
 const APP_ASSETS = [
   "./",
   "./index.html",
@@ -6,6 +6,9 @@ const APP_ASSETS = [
   "./app.js",
   "./manifest.webmanifest",
   "./assets/app-icon.svg",
+  "./assets/app-icon-180.png",
+  "./assets/app-icon-192.png",
+  "./assets/app-icon-512.png",
   "./assets/ops-map.svg"
 ];
 

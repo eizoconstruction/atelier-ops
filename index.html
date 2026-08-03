@@ -8,10 +8,30 @@
     <meta name="description" content="Application privée de gestion d'entreprise terrain : jobs, temps, kilométrage, documents et comptabilité." />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="assets/app-icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="assets/app-icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Atelier Ops" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <div class="login-screen" id="loginScreen">
+      <form class="login-card" id="loginForm">
+        <div class="brand brand-center">
+          <div class="brand-mark">AO</div>
+          <div>
+            <strong>Atelier Ops</strong>
+            <span>Console privée</span>
+          </div>
+        </div>
+        <label>Courriel<input name="email" type="email" required placeholder="toi@eizoconstruction.com" autocomplete="username" /></label>
+        <label>Mot de passe<input name="password" type="password" required placeholder="••••••••" autocomplete="current-password" /></label>
+        <p class="login-error" id="loginError" hidden></p>
+        <button class="primary-btn login-submit" type="submit" id="loginSubmit">Se connecter</button>
+      </form>
+    </div>
+
+    <div class="app-shell" id="appShell" hidden>
       <aside class="sidebar">
         <div class="brand">
           <div class="brand-mark">AO</div>
@@ -22,19 +42,26 @@
         </div>
         <nav class="nav" aria-label="Navigation principale">
           <button class="nav-item active" data-view="dashboard"><span>Vue d'ensemble</span><small>Priorités, revenus, alertes</small></button>
-          <button class="nav-item" data-view="jobs"><span>Clients et jobs</span><small>Pipeline des projets</small></button>
-          <button class="nav-item" data-view="calculator"><span>Estimation des jobs</span><small>Coûts, marge, taxes</small></button>
+          <button class="nav-item admin-only" data-view="jobs"><span>Clients et jobs</span><small>Pipeline des projets</small></button>
+          <button class="nav-item admin-only" data-view="calculator"><span>Estimation des jobs</span><small>Coûts, marge, taxes</small></button>
           <button class="nav-item" data-view="calendar"><span>Calendrier</span><small>Horaire chantier</small></button>
-          <button class="nav-item" data-view="time"><span>Feuilles de temps</span><small>Heures et approbation</small></button>
+          <button class="nav-item admin-only" data-view="time"><span>Feuilles de temps</span><small>Heures et approbation</small></button>
           <button class="nav-item employee-nav" data-view="employeeTime"><span>Saisie employé</span><small>Entrer mes heures</small></button>
           <button class="nav-item" data-view="mileage"><span>Kilométrage</span><small>Employés et véhicules</small></button>
           <button class="nav-item" data-view="documents"><span>Documents projet</span><small>Drive, photos, contrats</small></button>
-          <button class="nav-item" data-view="accounting"><span>Comptabilité</span><small>QuickBooks et marges</small></button>
-          <button class="nav-item" data-view="team"><span>Employés</span><small>Accès et charge</small></button>
+          <button class="nav-item admin-only" data-view="accounting"><span>Comptabilité</span><small>QuickBooks et marges</small></button>
+          <button class="nav-item admin-only" data-view="team"><span>Employés</span><small>Accès et charge</small></button>
         </nav>
         <div class="sidebar-foot">
           <span class="status-dot"></span>
           <span id="dataStatus">Connexion Supabase...</span>
+        </div>
+        <div class="user-foot">
+          <div class="user-info">
+            <strong id="userName">—</strong>
+            <span id="userRole">—</span>
+          </div>
+          <button class="logout-btn" id="logoutBtn" type="button">Déconnexion</button>
         </div>
       </aside>
 
