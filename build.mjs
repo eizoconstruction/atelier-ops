@@ -1,78 +1,69 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { extname } from "node:path";
+# Activer la connexion sécurisée (admin + employés)
 
-const files = [
-  "index.html",
-  "styles.css",
-  "app.js",
-  "manifest.webmanifest",
-  "sw.js",
-  "vercel.json",
-  "assets"
-];
+Suis ces étapes dans l'ordre. Tout se passe dans ton tableau de bord Supabase
+(https://supabase.com/dashboard → ton projet `atelier-ops`).
 
-await rm("dist", { recursive: true, force: true });
-await mkdir("dist", { recursive: true });
-await mkdir("dist/server", { recursive: true });
-await mkdir("dist/.openai", { recursive: true });
+## 1. Exécuter la migration SQL
 
-for (const file of files) {
-  await cp(file, `dist/${file}`, { recursive: true });
-}
+1. Ouvre `SQL Editor` dans le menu de gauche.
+2. Clique `New query`.
+3. Colle le contenu du fichier `supabase-auth-migration.sql`.
+4. Clique `Run`.
 
-await cp(".openai/hosting.json", "dist/.openai/hosting.json");
+Ça retire l'accès anonyme temporaire et active les vraies règles de sécurité
+(admin = tout, employé = ses propres heures et trajets).
 
-const routeFiles = [
-  "index.html",
-  "styles.css",
-  "app.js",
-  "manifest.webmanifest",
-  "sw.js",
-  "assets/app-icon.svg",
-  "assets/app-icon-180.png",
-  "assets/app-icon-192.png",
-  "assets/app-icon-512.png",
-  "assets/ops-map.svg"
-];
+⚠️ Fais cette étape APRÈS avoir créé au moins ton compte admin (étape 2),
+sinon personne ne pourra plus se connecter à l'app tant que le compte
+n'existe pas.
 
-const contentTypes = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".webmanifest": "application/manifest+json; charset=utf-8",
-  ".svg": "image/svg+xml; charset=utf-8",
-  ".png": "image/png"
-};
+## 2. Créer ton compte admin
 
-const assets = {};
-for (const file of routeFiles) {
-  const bytes = await readFile(file);
-  assets[`/${file}`] = {
-    body: bytes.toString("base64"),
-    contentType: contentTypes[extname(file)] || "application/octet-stream"
-  };
-}
-assets["/"] = assets["/index.html"];
+1. Va dans `Authentication` → `Users`.
+2. Clique `Add user` → `Create new user`.
+3. Entre ton courriel (ex. `shawn@eizoconstruction.com`) et un mot de passe.
+4. Coche `Auto Confirm User` pour éviter d'avoir à confirmer par courriel.
+5. Clique `Create user`.
+6. Copie le `User UID` généré (tu en as besoin à l'étape suivante).
 
-const server = `const assets = ${JSON.stringify(assets)};
+## 3. Créer ta fiche de profil (admin)
 
-function responseFor(pathname) {
-  const asset = assets[pathname] || assets["/index.html"];
-  const bytes = Uint8Array.from(atob(asset.body), char => char.charCodeAt(0));
-  return new Response(bytes, {
-    headers: {
-      "content-type": asset.contentType,
-      "cache-control": pathname === "/index.html" || pathname === "/" ? "no-cache" : "public, max-age=31536000"
-    }
-  });
-}
+1. Va dans `Table Editor` → table `profiles`.
+2. Clique `Insert` → `Insert row`.
+3. Remplis :
+   - `id` : colle le `User UID` copié à l'étape 2
+   - `full_name` : ton nom
+   - `role` : `admin`
+   - `phone` : optionnel
+4. Clique `Save`.
 
-export default {
-  fetch(request) {
-    const url = new URL(request.url);
-    return responseFor(url.pathname);
-  }
-};
-`;
+## 4. Ajouter tes employés (répéter pour chacun)
 
-await writeFile("dist/server/index.js", server);
+1. `Authentication` → `Users` → `Add user` → `Create new user`.
+2. Courriel + mot de passe temporaire, coche `Auto Confirm User`.
+3. Copie le `User UID`.
+4. `Table Editor` → `profiles` → `Insert row` :
+   - `id` : le `User UID` de l'employé
+   - `full_name` : son nom
+   - `role` : `employee`
+5. Donne-lui son courriel + mot de passe temporaire pour sa première connexion.
+   (Il pourra le changer plus tard dans Supabase si tu actives cette option.)
+
+## 5. Tester
+
+1. Ouvre l'app.
+2. Connecte-toi avec ton compte admin → tu dois voir tout le menu.
+3. Déconnecte-toi, connecte-toi avec un compte employé → le menu doit être
+   réduit (Vue d'ensemble, Calendrier, Saisie employé, Kilométrage,
+   Documents).
+
+## Résumé des accès
+
+| | Admin | Employé |
+|---|---|---|
+| Voir tous les jobs, clients, heures, trajets | ✅ | ✅ (lecture) |
+| Créer/modifier jobs, clients, véhicules | ✅ | ❌ |
+| Approuver les feuilles de temps | ✅ | ❌ |
+| Entrer ses propres heures | ✅ | ✅ |
+| Entrer ses propres trajets de kilométrage | ✅ | ✅ |
+| Gérer les employés | ✅ | ❌ |
