@@ -1,80 +1,406 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { extname } from "node:path";
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atelier Ops - Gestion d'entreprise</title>
+    <meta name="theme-color" content="#121b28" />
+    <meta name="description" content="Application privée de gestion d'entreprise terrain : jobs, temps, kilométrage, documents et comptabilité." />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="assets/app-icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">AO</div>
+          <div>
+            <strong>Atelier Ops</strong>
+            <span>Console privée</span>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Navigation principale">
+          <button class="nav-item active" data-view="dashboard"><span>Vue d'ensemble</span><small>Priorités, revenus, alertes</small></button>
+          <button class="nav-item" data-view="jobs"><span>Clients et jobs</span><small>Pipeline des projets</small></button>
+          <button class="nav-item" data-view="calculator"><span>Estimation des jobs</span><small>Coûts, marge, taxes</small></button>
+          <button class="nav-item" data-view="calendar"><span>Calendrier</span><small>Horaire chantier</small></button>
+          <button class="nav-item" data-view="time"><span>Feuilles de temps</span><small>Heures et approbation</small></button>
+          <button class="nav-item employee-nav" data-view="employeeTime"><span>Saisie employé</span><small>Entrer mes heures</small></button>
+          <button class="nav-item" data-view="mileage"><span>Kilométrage</span><small>Employés et véhicules</small></button>
+          <button class="nav-item" data-view="documents"><span>Documents projet</span><small>Drive, photos, contrats</small></button>
+          <button class="nav-item" data-view="accounting"><span>Comptabilité</span><small>QuickBooks et marges</small></button>
+          <button class="nav-item" data-view="team"><span>Employés</span><small>Accès et charge</small></button>
+        </nav>
+        <div class="sidebar-foot">
+          <span class="status-dot"></span>
+          <span id="dataStatus">Connexion Supabase...</span>
+        </div>
+      </aside>
 
-const files = [
-  "index.html",
-  "styles.css",
-  "app.js",
-  "manifest.webmanifest",
-  "sw.js",
-  "vercel.json",
-  "assets"
-];
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Administration</p>
+            <h1 id="viewTitle">Tableau de bord</h1>
+          </div>
+          <div class="top-actions">
+            <div class="search-wrap">
+              <span>⌕</span>
+              <input id="globalSearch" type="search" placeholder="Rechercher client, job, document..." />
+            </div>
+            <button class="primary-btn" id="newJobBtn">+ Nouveau job</button>
+          </div>
+        </header>
 
-await rm("dist", { recursive: true, force: true });
-await mkdir("dist", { recursive: true });
-await mkdir("dist/server", { recursive: true });
-await mkdir("dist/.openai", { recursive: true });
+        <section class="view active" id="dashboard">
+          <div class="metric-grid">
+            <article class="metric">
+              <span>Revenus prévus</span>
+              <strong id="plannedRevenue">$0</strong>
+              <small>Jobs ouverts</small>
+            </article>
+            <article class="metric">
+              <span>Marge estimée</span>
+              <strong id="grossMargin">0%</strong>
+              <small>Après main-d'oeuvre et matériaux</small>
+            </article>
+            <article class="metric">
+              <span>Heures cette semaine</span>
+              <strong id="weekHours">0 h</strong>
+              <small>À valider</small>
+            </article>
+            <article class="metric">
+              <span>Factures ouvertes</span>
+              <strong id="openInvoices">$0</strong>
+              <small>QuickBooks à brancher</small>
+            </article>
+          </div>
 
-for (const file of files) {
-  await cp(file, `dist/${file}`, { recursive: true });
-}
+          <div class="dashboard-grid">
+            <section class="panel wide-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Jobs actifs</h2>
+                  <p>Vue rapide des priorités et prochaines visites.</p>
+                </div>
+                <button class="ghost-btn" data-jump="jobs">Voir tout</button>
+              </div>
+              <div id="activeJobs" class="job-list"></div>
+            </section>
 
-await cp(".openai/hosting.json", "dist/.openai/hosting.json").catch(() => {
-  console.warn("Skipped .openai/hosting.json (not present) - fine for Vercel/static hosting.");
-});
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Opérations terrain</h2>
+                  <p>Charge prévue par jour.</p>
+                </div>
+              </div>
+              <img class="ops-map" src="assets/ops-map.svg" alt="Carte stylisée des opérations terrain" />
+              <div id="scheduleMini" class="schedule-mini"></div>
+            </section>
 
-const routeFiles = [
-  "index.html",
-  "styles.css",
-  "app.js",
-  "manifest.webmanifest",
-  "sw.js",
-  "assets/app-icon.svg",
-  "assets/app-icon-180.png",
-  "assets/app-icon-192.png",
-  "assets/app-icon-512.png",
-  "assets/ops-map.svg"
-];
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Alertes</h2>
+                  <p>À régler avant la fin de journée.</p>
+                </div>
+              </div>
+              <ul class="alert-list" id="alerts"></ul>
+            </section>
+          </div>
+        </section>
 
-const contentTypes = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".webmanifest": "application/manifest+json; charset=utf-8",
-  ".svg": "image/svg+xml; charset=utf-8",
-  ".png": "image/png"
-};
+        <section class="view" id="jobs">
+          <div class="toolbar">
+            <div class="segmented">
+              <button class="active" data-filter="all">Tous</button>
+              <button data-filter="Planifié">Planifiés</button>
+              <button data-filter="En cours">En cours</button>
+              <button data-filter="À facturer">À facturer</button>
+            </div>
+            <button class="secondary-btn" id="exportJobs">Exporter CSV</button>
+          </div>
+          <div class="jobs-workspace">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Job</th>
+                    <th>Client</th>
+                    <th>Statut</th>
+                    <th>Date</th>
+                    <th>Équipe</th>
+                    <th>Prix</th>
+                    <th>Marge</th>
+                    <th>Dossier</th>
+                  </tr>
+                </thead>
+                <tbody id="jobsTable"></tbody>
+              </table>
+            </div>
+            <aside class="job-detail" id="jobDetail"></aside>
+          </div>
+        </section>
 
-const assets = {};
-for (const file of routeFiles) {
-  const bytes = await readFile(file);
-  assets[`/${file}`] = {
-    body: bytes.toString("base64"),
-    contentType: contentTypes[extname(file)] || "application/octet-stream"
-  };
-}
-assets["/"] = assets["/index.html"];
+        <section class="view" id="calculator">
+          <div class="calculator-layout">
+            <section class="panel calc-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Calculateur de job</h2>
+                  <p>Prix proposé basé sur coûts, temps, marge et taxes.</p>
+                </div>
+              </div>
+              <form id="quoteForm" class="form-grid">
+                <label>Nom du job<input name="name" placeholder="Ex. Patio arrière" /></label>
+                <label>Matériaux ($)<input name="materials" type="number" value="0" min="0" /></label>
+                <label>Heures prévues<input name="hours" type="number" value="0" min="0" /></label>
+                <label>Taux horaire ($)<input name="rate" type="number" value="0" min="0" /></label>
+                <label>Sous-traitants ($)<input name="subs" type="number" value="0" min="0" /></label>
+                <label>Transport ($)<input name="travel" type="number" value="0" min="0" /></label>
+                <label>Marge cible (%)<input name="margin" type="number" value="0" min="0" max="80" /></label>
+                <label>Taxes (%)<input name="tax" type="number" value="14.975" min="0" /></label>
+              </form>
+            </section>
+            <aside class="quote-summary">
+              <p>Prix recommandé</p>
+              <strong id="quoteTotal">$0</strong>
+              <div class="summary-lines" id="quoteLines"></div>
+              <button class="primary-btn full" id="saveQuote">Créer un job avec ce prix</button>
+            </aside>
+          </div>
+        </section>
 
-const server = `const assets = ${JSON.stringify(assets)};
+        <section class="view" id="calendar">
+          <div class="calendar-shell">
+            <div class="calendar-top">
+              <div>
+                <p class="eyebrow">Semaine de production</p>
+                <h2>Juillet 2026</h2>
+              </div>
+              <div class="calendar-actions">
+                <button class="secondary-btn">Aujourd'hui</button>
+                <button class="secondary-btn">Semaine</button>
+                <button class="primary-btn">Mois</button>
+              </div>
+            </div>
+            <div class="calendar-weekdays">
+              <span>Lun</span>
+              <span>Mar</span>
+              <span>Mer</span>
+              <span>Jeu</span>
+              <span>Ven</span>
+              <span>Sam</span>
+              <span>Dim</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid"></div>
+          </div>
+        </section>
 
-function responseFor(pathname) {
-  const asset = assets[pathname] || assets["/index.html"];
-  const bytes = Uint8Array.from(atob(asset.body), char => char.charCodeAt(0));
-  return new Response(bytes, {
-    headers: {
-      "content-type": asset.contentType,
-      "cache-control": pathname === "/index.html" || pathname === "/" ? "no-cache" : "public, max-age=31536000"
-    }
-  });
-}
+        <section class="view" id="time">
+          <div class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Feuilles de temps</h2>
+                <p>Entrées par employé, job et statut d'approbation.</p>
+              </div>
+              <button class="secondary-btn" id="approveAll">Approuver la semaine</button>
+            </div>
+            <div id="timeEntries" class="time-list"></div>
+          </div>
+        </section>
 
-export default {
-  fetch(request) {
-    const url = new URL(request.url);
-    return responseFor(url.pathname);
-  }
-};
-`;
+        <section class="view" id="employeeTime">
+          <div class="employee-time-layout">
+            <section class="panel employee-entry-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Mode employé</p>
+                  <h2>Entrer mes heures</h2>
+                  <p>Formulaire simple pour téléphone : job, date, heures et note.</p>
+                </div>
+              </div>
+              <form id="employeeTimeForm" class="employee-time-form">
+                <label>Employé
+                  <select name="person" id="employeeTimePerson"></select>
+                </label>
+                <label>Job
+                  <select name="job" id="employeeTimeJob"></select>
+                </label>
+                <div class="employee-time-row">
+                  <label>Date
+                    <input name="date" type="date" value="2026-07-11" required />
+                  </label>
+                  <label>Heures
+                    <input name="hours" type="number" min="0.25" step="0.25" value="8" required />
+                  </label>
+                </div>
+                <label>Note de journée
+                  <textarea name="note" rows="4" placeholder="Ex. Travaux complétés, matériel manquant, photo ajoutée..."></textarea>
+                </label>
+                <button class="primary-btn full" type="submit">Envoyer mes heures</button>
+              </form>
+            </section>
+            <aside class="panel employee-summary-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Mes entrées</h2>
+                  <p>Suivi rapide avant approbation.</p>
+                </div>
+              </div>
+              <div class="employee-total">
+                <span>Total semaine</span>
+                <strong id="employeeWeekTotal">0 h</strong>
+              </div>
+              <div id="employeeTimeList" class="employee-time-list"></div>
+            </aside>
+          </div>
+        </section>
 
-await writeFile("dist/server/index.js", server);
+        <section class="view" id="mileage">
+          <div class="mileage-layout">
+            <section class="panel mileage-main">
+              <div class="panel-head">
+                <div>
+                  <h2>Kilométrage professionnel</h2>
+                  <p>Suivi des trajets par employé, véhicule et job.</p>
+                </div>
+                <button class="primary-btn" id="startTrip">Démarrer un trajet</button>
+              </div>
+              <div class="mileage-filters">
+                <label>Employé
+                  <select id="employeeFilter"></select>
+                </label>
+                <label>Véhicule
+                  <select id="vehicleFilter"></select>
+                </label>
+              </div>
+              <div class="mileage-metrics">
+                <article>
+                  <span>Km ce mois</span>
+                  <strong id="mileageMonth">0 km</strong>
+                </article>
+                <article>
+                  <span>Remboursement estimé</span>
+                  <strong id="mileageReimbursement">$0</strong>
+                </article>
+                <article>
+                  <span>Trajets pro</span>
+                  <strong id="mileageTrips">0</strong>
+                </article>
+              </div>
+              <div class="table-wrap">
+                <table class="mileage-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Employé</th>
+                      <th>Véhicule</th>
+                      <th>Job</th>
+                      <th>Départ</th>
+                      <th>Arrivée</th>
+                      <th>Km</th>
+                      <th>Type</th>
+                    </tr>
+                  </thead>
+                  <tbody id="mileageTable"></tbody>
+                </table>
+              </div>
+            </section>
+            <aside class="job-detail mileage-side">
+              <div class="detail-head">
+                <div>
+                  <p class="eyebrow">GPS mobile</p>
+                  <h2>Trajet actif</h2>
+                  <p id="tripStatus">Aucun trajet en cours.</p>
+                </div>
+              </div>
+              <div class="trip-form">
+                <label>Employé
+                  <select id="tripEmployee"></select>
+                </label>
+                <label>Véhicule
+                  <select id="tripVehicle"></select>
+                </label>
+                <label>Job
+                  <select id="tripJob"></select>
+                </label>
+              </div>
+              <div class="detail-summary">
+                Dans la vraie app mobile, ce bouton utiliserait le GPS pendant que le trajet est actif. En PWA, c'est fiable surtout quand l'app reste ouverte.
+              </div>
+              <button class="secondary-btn full" id="finishTrip">Terminer et classer</button>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="documents">
+          <div class="integration-band">
+            <div>
+              <h2>Google Drive par projet</h2>
+              <p>Lier chaque job à son dossier Drive : contrats, photos, plans, factures et feuilles de calcul.</p>
+            </div>
+            <button class="primary-btn">Connecter Drive</button>
+          </div>
+          <div class="doc-grid" id="docGrid"></div>
+        </section>
+
+        <section class="view" id="accounting">
+          <div class="accounting-layout">
+            <section class="integration-band compact">
+              <div>
+                <h2>QuickBooks</h2>
+                <p>Synchroniser factures, dépenses, paiements et profit par job.</p>
+              </div>
+              <button class="primary-btn">Connecter QuickBooks</button>
+            </section>
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>Suivi financier</h2>
+                  <p>Vue opérationnelle avant branchement comptable.</p>
+                </div>
+              </div>
+              <div id="financeRows" class="finance-rows"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="team">
+          <div class="team-grid" id="teamGrid"></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="jobDialog">
+      <form method="dialog" class="dialog-form" id="jobForm">
+        <div class="panel-head">
+          <div>
+            <h2>Nouveau job</h2>
+            <p>Ajoute un projet à ton pipeline.</p>
+          </div>
+          <button class="icon-btn" id="closeJobDialog" type="button" aria-label="Fermer">×</button>
+        </div>
+        <label>Nom du job<input name="name" required placeholder="Ex. Pavé uni entrée" /></label>
+        <label>Client<input name="client" required placeholder="Nom du client" /></label>
+        <label>Date<input name="date" type="date" required /></label>
+        <label>Prix estimé<input name="price" type="number" min="0" value="2500" required /></label>
+        <label>Statut
+          <select name="status">
+            <option>Planifié</option>
+            <option>En cours</option>
+            <option>À facturer</option>
+          </select>
+        </label>
+        <menu>
+          <button class="secondary-btn" id="cancelJobDialog" type="button">Annuler</button>
+          <button class="primary-btn" id="submitJob" value="default">Ajouter</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
