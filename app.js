@@ -1,780 +1,202 @@
-const money = new Intl.NumberFormat("fr-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 });
-
-const SUPABASE_URL = "https://qjnuksrjdymakizznkiy.supabase.co";
-const SUPABASE_KEY = "sb_publishable_5X7nWxX2nIobh_2eUN69Xw_jmF7U-HX";
-
-const state = {
-  filter: "all",
-  selectedJobId: null,
-  mileageEmployee: "Tous",
-  mileageVehicle: "Tous",
-  tripActive: false,
-  jobs: [],
-  team: [],
-  time: [],
-  vehicles: [],
-  mileage: []
+const defaultData = {
+  jobs: [
+    { id: 'j1', name: 'Rénovation cuisine — Tremblay', client: 'Marie Tremblay', progress: 72, budget: '42 000 $', color: 'blue', timeLog: [] },
+    { id: 'j2', name: 'Agrandissement — Gagnon', client: 'Simon Gagnon', progress: 46, budget: '96 500 $', color: 'green', timeLog: [] },
+    { id: 'j3', name: 'Salle de bain — Lavoie', client: 'Émilie Lavoie', progress: 88, budget: '18 750 $', color: 'amber', timeLog: [] },
+    { id: 'j4', name: 'Terrasse & pergola — Roy', client: 'Alex Roy', progress: 18, budget: '27 900 $', color: 'violet', timeLog: [] }
+  ],
+  tasks: [
+    { text: 'Confirmer la livraison des armoires', due: 'Aujourd’hui · Cuisine Tremblay', done: false },
+    { text: 'Envoyer le devis révisé à M. Gagnon', due: 'Aujourd’hui · Avant 16 h', done: false },
+    { text: 'Planifier l’équipe pour le chantier Roy', due: 'Demain · Terrasse & pergola', done: false },
+    { text: 'Commander la céramique', due: 'Terminé · Salle de bain Lavoie', done: true }
+  ],
+  events: [
+    { id: 1, day: 2, start: '09:00', end: '10:00', title: 'Visite Tremblay', location: 'Cuisine Tremblay', color: 'blue' },
+    { id: 2, day: 7, start: '09:00', end: '10:00', title: 'Livraison armoires', location: 'Cuisine Tremblay', color: 'yellow' },
+    { id: 3, day: 10, start: '09:00', end: '10:00', title: 'Équipe Gagnon', location: 'Agrandissement Gagnon', color: 'green' },
+    { id: 4, day: 14, start: '09:00', end: '10:00', title: 'Inspection Lavoie', location: 'Salle de bain Lavoie', color: 'blue' },
+    { id: 5, day: 18, start: '09:00', end: '10:00', title: 'Rencontre Roy', location: 'Terrasse & pergola Roy', color: 'yellow' },
+    { id: 6, day: 22, start: '09:00', end: '10:00', title: 'Facturation', location: 'Bureau', color: 'green' },
+    { id: 7, day: 28, start: '08:00', end: '10:30', title: 'Visite de chantier', location: 'Cuisine Tremblay', color: 'blue' },
+    { id: 8, day: 28, start: '10:45', end: '12:00', title: 'Rencontre client', location: 'Agrandissement Gagnon', color: 'yellow' },
+    { id: 9, day: 28, start: '13:30', end: '15:00', title: 'Inspection finale', location: 'Salle de bain Lavoie', color: 'green' },
+    { id: 10, day: 28, start: '15:30', end: '16:30', title: 'Préparation des devis', location: 'Bureau', color: 'blue' }
+  ]
 };
-
-const db = {
-  enabled: Boolean(SUPABASE_URL && SUPABASE_KEY),
-  connected: false
-};
-
-const titles = {
-  dashboard: "Vue d'ensemble",
-  jobs: "Clients et jobs",
-  calculator: "Estimation des jobs",
-  calendar: "Calendrier",
-  time: "Feuilles de temps",
-  employeeTime: "Saisie employé",
-  mileage: "Kilométrage",
-  documents: "Documents projet",
-  accounting: "Comptabilité",
-  team: "Employés"
-};
-
-function qs(selector) {
-  return document.querySelector(selector);
+const TODAY_DAY = 28;
+let data = JSON.parse(localStorage.getItem('atelier-ops-data') || 'null') || defaultData;
+if (!Array.isArray(data.events)) data.events = defaultData.events;
+if (!Array.isArray(data.jobs)) data.jobs = defaultData.jobs;
+data.jobs.forEach((job, i) => { if (!job.id) job.id = `job-legacy-${i}`; if (!Array.isArray(job.timeLog)) job.timeLog = []; });
+if (typeof data.activeTimer === 'undefined') data.activeTimer = null;
+if (data.activeTimer && !data.jobs.some(job => job.id === data.activeTimer.jobId)) data.activeTimer = null;
+const $ = (selector) => document.querySelector(selector);
+const esc = (value) => String(value).replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+function save(message = 'Modifications sauvegardées') { localStorage.setItem('atelier-ops-data', JSON.stringify(data)); showToast(message); }
+function showToast(message) { const toast = $('#toast'); toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2500); }
+function formatClock(totalSeconds) {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return [h, m, sec].map(n => String(n).padStart(2, '0')).join(':');
 }
-
-function qsa(selector) {
-  return [...document.querySelectorAll(selector)];
+function formatHours(totalSeconds) { return `${(totalSeconds / 3600).toFixed(1).replace('.', ',')} h`; }
+function jobTotalSeconds(job) {
+  const logged = job.timeLog.reduce((sum, entry) => sum + (entry.durationSeconds || 0), 0);
+  const live = (data.activeTimer && data.activeTimer.jobId === job.id) ? Math.floor((Date.now() - data.activeTimer.startedAt) / 1000) : 0;
+  return logged + live;
 }
-
-function setDataStatus(text, connected = false) {
-  const status = qs("#dataStatus");
-  const dot = qs(".status-dot");
-  if (status) status.textContent = text;
-  if (dot) dot.classList.toggle("offline", !connected);
+function formatEntry(entry) {
+  const start = new Date(entry.start), end = new Date(entry.end);
+  const dateStr = start.toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' });
+  const startStr = start.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+  const endStr = end.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+  return `${dateStr} · ${startStr}–${endStr} · ${formatHours(entry.durationSeconds)}`;
 }
-
-async function supabaseRequest(path, options = {}) {
-  if (!db.enabled) throw new Error("Supabase n'est pas configuré.");
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    ...options,
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    }
-  });
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Erreur Supabase ${response.status}`);
-  }
-  if (response.status === 204) return null;
-  return response.json();
+function startTimer(jobId) {
+  if (data.activeTimer) { showToast('Arrêtez le chronomètre en cours avant d’en démarrer un autre.'); return; }
+  data.activeTimer = { jobId, startedAt: Date.now() };
+  renderJobs();
+  save('Chronomètre démarré');
 }
-
-function mapJobFromDb(job, clientsById = {}) {
-  const client = clientsById[job.client_id];
-  return {
-    id: job.id,
-    name: job.name,
-    client: client?.name || "Client à confirmer",
-    address: job.address || "",
-    status: job.status || "Planifié",
-    date: job.scheduled_date || "",
-    crew: job.assigned_team || "À assigner",
-    price: Number(job.price || 0),
-    cost: Number(job.cost || 0),
-    drive: job.drive_url || "Dossier Drive à créer",
-    invoice: job.status === "À facturer" ? Number(job.price || 0) : 0,
-    summary: job.summary || "Dossier à compléter.",
-    documents: [],
-    plans: [],
-    quotes: [],
-    photos: [],
-    log: []
-  };
+function stopTimer() {
+  if (!data.activeTimer) return;
+  const { jobId, startedAt } = data.activeTimer;
+  const job = data.jobs.find(item => item.id === jobId);
+  const durationSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+  if (job) job.timeLog.push({ id: `t-${Date.now()}`, start: new Date(startedAt).toISOString(), end: new Date().toISOString(), durationSeconds });
+  data.activeTimer = null;
+  renderJobs();
+  save(`Temps enregistré : ${formatHours(durationSeconds)}`);
 }
-
-function mapTimeFromDb(entry, profilesById = {}, jobsById = {}) {
-  return {
-    id: entry.id,
-    person: entry.employee_name || profilesById[entry.employee_id]?.full_name || "Employé à confirmer",
-    job: entry.job_name || jobsById[entry.job_id]?.name || "Job à confirmer",
-    hours: Number(entry.hours || 0),
-    status: entry.status || "À approuver",
-    note: entry.notes || ""
-  };
+function deleteTimerEntry(jobId, entryId) {
+  const job = data.jobs.find(item => item.id === jobId);
+  if (!job) return;
+  job.timeLog = job.timeLog.filter(entry => entry.id !== entryId);
+  renderJobs();
+  save('Session supprimée');
 }
-
-function mapMileageFromDb(trip, profilesById = {}, vehiclesById = {}, jobsById = {}) {
-  return {
-    id: trip.id,
-    date: trip.trip_date,
-    employee: trip.employee_name || profilesById[trip.employee_id]?.full_name || "Employé à confirmer",
-    vehicle: trip.vehicle_name || vehiclesById[trip.vehicle_id]?.name || "Véhicule à confirmer",
-    job: trip.job_name || jobsById[trip.job_id]?.name || "Job à confirmer",
-    start: trip.start_label || "",
-    end: trip.end_label || "",
-    km: Number(trip.distance_km || 0),
-    type: trip.trip_type || "Professionnel"
-  };
+function tick() {
+  if (!data.activeTimer) return;
+  const card = document.querySelector(`.project-card[data-job-id="${data.activeTimer.jobId}"]`);
+  const job = data.jobs.find(item => item.id === data.activeTimer.jobId);
+  if (!card || !job) return;
+  const liveEl = card.querySelector('.timer-live');
+  const totalEl = card.querySelector('.timer-total');
+  if (liveEl) liveEl.textContent = formatClock((Date.now() - data.activeTimer.startedAt) / 1000);
+  if (totalEl) totalEl.textContent = `Total : ${formatHours(jobTotalSeconds(job))}`;
 }
-
-async function loadFromSupabase() {
-  try {
-    const [clients, jobs, profiles, timeEntries, vehicles, mileageTrips] = await Promise.all([
-      supabaseRequest("clients?select=*&order=created_at.desc"),
-      supabaseRequest("jobs?select=*&order=created_at.desc"),
-      supabaseRequest("profiles?select=*&order=created_at.desc"),
-      supabaseRequest("time_entries?select=*&order=created_at.desc"),
-      supabaseRequest("vehicles?select=*&order=created_at.desc"),
-      supabaseRequest("mileage_trips?select=*&order=created_at.desc")
-    ]);
-
-    const clientsById = Object.fromEntries(clients.map(client => [client.id, client]));
-    const jobsByIdRaw = Object.fromEntries(jobs.map(job => [job.id, job]));
-    const profilesById = Object.fromEntries(profiles.map(profile => [profile.id, profile]));
-    const vehiclesById = Object.fromEntries(vehicles.map(vehicle => [vehicle.id, vehicle]));
-
-    state.jobs = jobs.map(job => mapJobFromDb(job, clientsById));
-    state.team = profiles.map(profile => ({
-      id: profile.id,
-      name: profile.full_name,
-      role: profile.role === "admin" ? "Admin" : "Employé",
-      hours: 0,
-      jobs: 0,
-      access: profile.role
-    }));
-    state.time = timeEntries.map(entry => mapTimeFromDb(entry, profilesById, jobsByIdRaw));
-    state.vehicles = vehicles.map(vehicle => ({ id: vehicle.id, label: vehicle.name }));
-    state.mileage = mileageTrips.map(trip => mapMileageFromDb(trip, profilesById, vehiclesById, jobsByIdRaw));
-    state.selectedJobId = state.jobs[0]?.id || null;
-    db.connected = true;
-    setDataStatus("Supabase connecté", true);
-  } catch (error) {
-    console.warn("Supabase fallback:", error);
-    db.connected = false;
-    setDataStatus("Mode local - permissions Supabase à vérifier", false);
-  }
-}
-
-async function createJobInSupabase(data) {
-  if (!db.connected) return null;
-  const [client] = await supabaseRequest("clients", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      name: data.client,
-      created_at: new Date().toISOString()
-    })
-  });
-  const [job] = await supabaseRequest("jobs", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      client_id: client.id,
-      name: data.name,
-      status: data.status,
-      scheduled_date: data.date,
-      assigned_team: "À assigner",
-      price: Number(data.price),
-      cost: Math.round(Number(data.price) * 0.64),
-      summary: "Nouveau job ajouté au pipeline. Dossier à compléter.",
-      drive_url: `Dossier Drive / ${data.client}`
-    })
-  });
-  return mapJobFromDb(job, { [client.id]: client });
-}
-
-async function createQuoteJobInSupabase(quote) {
-  if (!db.connected) return null;
-  const clientName = "Client à confirmer";
-  const [client] = await supabaseRequest("clients", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ name: clientName })
-  });
-  const [job] = await supabaseRequest("jobs", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      client_id: client.id,
-      name: quote.name || "Job sans titre",
-      status: "Planifié",
-      scheduled_date: "2026-07-20",
-      assigned_team: "À assigner",
-      price: Math.round(quote.total),
-      cost: Math.round(quote.cost),
-      summary: "Job créé depuis le calculateur. Détails à compléter.",
-      drive_url: "Dossier Drive à créer"
-    })
-  });
-  return mapJobFromDb(job, { [client.id]: client });
-}
-
-async function createTimeEntryInSupabase(data) {
-  if (!db.connected) return null;
-  const [entry] = await supabaseRequest("time_entries", {
-    method: "POST",
-    headers: { Prefer: "return=representation" },
-    body: JSON.stringify({
-      employee_name: data.person,
-      job_name: data.job,
-      work_date: data.date,
-      hours: Number(data.hours),
-      status: "À approuver",
-      notes: data.note || ""
-    })
-  });
-  return mapTimeFromDb(entry);
-}
-
-function margin(job) {
-  if (!job.price) return 0;
-  return Math.round(((job.price - job.cost) / job.price) * 100);
-}
-
-function emptyState(title, body) {
-  return `<div class="empty-state"><strong>${title}</strong><span>${body}</span></div>`;
-}
-
-function statusBadge(status) {
-  const cls = status === "Planifié" ? "plan" : status === "En cours" ? "progress" : "invoice";
-  return `<span class="badge ${cls}">${status}</span>`;
-}
-
-function renderDashboard() {
-  const openJobs = state.jobs.filter(job => job.status !== "À facturer");
-  const revenue = openJobs.reduce((sum, job) => sum + job.price, 0);
-  const cost = openJobs.reduce((sum, job) => sum + job.cost, 0);
-  const hours = state.time.reduce((sum, entry) => sum + entry.hours, 0);
-  const invoices = state.jobs.reduce((sum, job) => sum + job.invoice, 0);
-
-  qs("#plannedRevenue").textContent = money.format(revenue);
-  qs("#grossMargin").textContent = `${revenue ? Math.round(((revenue - cost) / revenue) * 100) : 0}%`;
-  qs("#weekHours").textContent = `${hours.toFixed(1)} h`;
-  qs("#openInvoices").textContent = money.format(invoices);
-
-  qs("#activeJobs").innerHTML = state.jobs.length ? state.jobs.slice(0, 4).map(job => `
-    <article class="job-card">
-      <div>
-        <h3>${job.name}</h3>
-        <div class="job-meta">${job.client} · ${job.date} · ${job.crew}</div>
-      </div>
-      <div>${statusBadge(job.status)}</div>
-      <div class="job-meta">${money.format(job.price)} · marge ${margin(job)}%</div>
-    </article>
-  `).join("") : emptyState("Aucun job actif", "Crée ton premier job avec le bouton Nouveau job.");
-
-  qs("#scheduleMini").innerHTML = state.jobs.length ? state.jobs.slice(0, 3).map(job => `
-    <div class="finance-row"><span>${job.date}</span><strong>${job.crew}</strong></div>
-  `).join("") : emptyState("Aucun horaire", "Les prochains jobs apparaîtront ici.");
-
-  qs("#alerts").innerHTML = [
-    "Version vierge prête à configurer.",
-    "Ajoute tes employés, véhicules et premiers jobs.",
-    "La sauvegarde réelle sera activée avec Supabase."
-  ].map(alert => `<li>${alert}</li>`).join("");
-}
-
 function renderJobs() {
-  const search = qs("#globalSearch").value.toLowerCase().trim();
-  const rows = state.jobs.filter(job => {
-    const matchesFilter = state.filter === "all" || job.status === state.filter;
-    const matchesSearch = !search || `${job.name} ${job.client} ${job.crew}`.toLowerCase().includes(search);
-    return matchesFilter && matchesSearch;
-  });
-
-  qs("#jobsTable").innerHTML = rows.length ? rows.map(job => `
-    <tr class="${job.id === state.selectedJobId ? "selected-row" : ""}">
-      <td><strong>${job.name}</strong><br><span class="job-meta">${job.drive}</span></td>
-      <td>${job.client}</td>
-      <td>${statusBadge(job.status)}</td>
-      <td>${job.date}</td>
-      <td>${job.crew}</td>
-      <td>${money.format(job.price)}</td>
-      <td>${margin(job)}%</td>
-      <td><button class="mini-btn" data-job-id="${job.id}">Voir dossier</button></td>
-    </tr>
-  `).join("") : `<tr><td colspan="8">${emptyState("Aucun job", "Ajoute ton premier job pour remplir ce tableau.")}</td></tr>`;
-
-  renderJobDetail();
-  qsa("[data-job-id]").forEach(button => button.addEventListener("click", () => {
-    state.selectedJobId = button.dataset.jobId;
-    renderJobs();
-  }));
+  $('#active-job-count').textContent = data.jobs.length;
+  const rows = data.jobs.slice(0, 4).map(job => {
+    const isActive = data.activeTimer && data.activeTimer.jobId === job.id;
+    return `<div class="job-row"><span class="job-logo">⌂</span><div><b>${esc(job.name)}${isActive ? '<span class="live-badge">En cours</span>' : ''}</b><small>${esc(job.client)}</small></div><div class="progress"><i style="width:${job.progress}%"></i></div><em>${job.progress}%</em></div>`;
+  }).join('');
+  $('#job-list').innerHTML = rows;
+  $('#projects-grid').innerHTML = data.jobs.map(job => {
+    const isActive = data.activeTimer && data.activeTimer.jobId === job.id;
+    const blocked = data.activeTimer && !isActive;
+    const historyRows = job.timeLog.slice().reverse().map(entry => `<div class="timer-entry"><span>${formatEntry(entry)}</span><button type="button" data-delete-entry="${entry.id}" data-job-id="${job.id}" aria-label="Supprimer cette session">✕</button></div>`).join('');
+    return `<article class="project-card" data-job-id="${job.id}"><header><span class="metric-icon ${job.color || 'blue'}">⌂</span><span class="status">EN COURS</span></header><h2>${esc(job.name)}</h2><p>${esc(job.client)} · Budget : ${esc(job.budget)}</p><div class="progress"><i style="width:${job.progress}%"></i></div><footer><span>Progression</span><b>${job.progress}%</b></footer><div class="timer-block"><div class="timer-row"><button type="button" class="timer-button ${isActive ? 'active' : ''}" data-timer-action="${isActive ? 'stop' : 'start'}" data-job-id="${job.id}" ${blocked ? 'disabled title="Un autre chronomètre est déjà en cours"' : ''}>${isActive ? '⏹ Arrêter' : '▶ Démarrer'}</button><span class="timer-live">${isActive ? formatClock((Date.now() - data.activeTimer.startedAt) / 1000) : ''}</span><span class="timer-total">Total : ${formatHours(jobTotalSeconds(job))}</span></div>${job.timeLog.length ? `<details class="timer-history"><summary>Historique (${job.timeLog.length})</summary>${historyRows}</details>` : ''}</div></article>`;
+  }).join('');
 }
-
-function detailList(items) {
-  return items.map(item => `<li>${item}</li>`).join("");
+function renderTasks() {
+  $('#task-list').innerHTML = data.tasks.map((task, index) => `<label class="task-item ${task.done ? 'done' : ''}"><input class="task-check" data-task="${index}" type="checkbox" ${task.done ? 'checked' : ''}/><span><b>${esc(task.text)}</b><span>${esc(task.due)}</span></span></label>`).join('');
 }
-
-function renderJobDetail() {
-  const job = state.jobs.find(item => item.id === state.selectedJobId) || state.jobs[0];
-  if (!job) {
-    qs("#jobDetail").innerHTML = emptyState("Aucun dossier sélectionné", "Le détail du job apparaîtra ici après la création d'un projet.");
-    return;
-  }
-
-  qs("#jobDetail").innerHTML = `
-    <div class="detail-head">
-      <div>
-        <p class="eyebrow">Dossier de job</p>
-        <h2>${job.name}</h2>
-        <p>${job.client} · ${job.address}</p>
-      </div>
-      ${statusBadge(job.status)}
-    </div>
-    <div class="detail-stats">
-      <div><span>Prix</span><strong>${money.format(job.price)}</strong></div>
-      <div><span>Coût</span><strong>${money.format(job.cost)}</strong></div>
-      <div><span>Marge</span><strong>${margin(job)}%</strong></div>
-    </div>
-    <p class="detail-summary">${job.summary}</p>
-    <div class="detail-tabs">
-      <section>
-        <h3>Documents</h3>
-        <ul>${detailList(job.documents)}</ul>
-      </section>
-      <section>
-        <h3>Plans</h3>
-        <ul>${detailList(job.plans)}</ul>
-      </section>
-      <section>
-        <h3>Devis</h3>
-        <ul>${detailList(job.quotes)}</ul>
-      </section>
-      <section>
-        <h3>Photos</h3>
-        <ul>${detailList(job.photos)}</ul>
-      </section>
-    </div>
-    <section class="job-log">
-      <h3>Journal de bord</h3>
-      ${job.log.map(entry => `<div>${entry}</div>`).join("")}
-    </section>
-    <button class="secondary-btn full">Ouvrir le dossier Drive</button>
-  `;
+function renderSchedule() {
+  const todays = data.events.filter(e => e.day === TODAY_DAY).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+  $('#schedule-list').innerHTML = todays.length
+    ? todays.map(e => `<div class="schedule-item"><time>${esc(e.start || '—')}<small>${esc(e.end || '')}</small></time><span class="schedule-dot ${e.color === 'blue' ? '' : (e.color || '')}"></span><div class="schedule-info"><b>${esc(e.title)}</b><span>${esc(e.location || '')}</span></div><span class="schedule-avatar">SM</span></div>`).join('')
+    : `<p style="color:#8a97ab;font-size:13px;padding:6px 0">Aucun rendez-vous prévu aujourd’hui.</p>`;
 }
-
 function renderCalendar() {
-  const days = [
-    { date: 29, muted: true },
-    { date: 30, muted: true },
-    { date: 1 },
-    { date: 2 },
-    { date: 3 },
-    { date: 4 },
-    { date: 5 },
-    { date: 6 },
-    { date: 7 },
-    { date: 8 },
-    { date: 9 },
-    { date: 10 },
-    { date: 11, today: true },
-    { date: 12 },
-    { date: 13 },
-    { date: 14 },
-    { date: 15 },
-    { date: 16 },
-    { date: 17 },
-    { date: 18 },
-    { date: 19 },
-    { date: 20 },
-    { date: 21 },
-    { date: 22 },
-    { date: 23 },
-    { date: 24 },
-    { date: 25 },
-    { date: 26 },
-    { date: 27 },
-    { date: 28 },
-    { date: 29 },
-    { date: 30 },
-    { date: 31 },
-    { date: 1, muted: true },
-    { date: 2, muted: true }
-  ];
-  const jobsByDay = state.jobs.reduce((map, job) => {
-    const day = Number(job.date.slice(-2));
-    map[day] = [...(map[day] || []), job];
-    return map;
-  }, {});
-
-  qs("#calendarGrid").innerHTML = days.map(day => {
-    const jobs = day.muted ? [] : jobsByDay[day.date] || [];
-    const count = jobs.length ? `${jobs.length} job${jobs.length > 1 ? "s" : ""}` : "";
-    const classes = ["calendar-day", day.muted ? "muted" : "", day.today ? "today" : ""].filter(Boolean).join(" ");
-    return `
-      <article class="${classes}">
-        <div class="calendar-date"><span>${day.date}</span><span class="calendar-count">${count}</span></div>
-        ${jobs.map(job => {
-          const itemClass = job.status === "À facturer" ? "invoice" : job.status === "En cours" ? "progress" : "";
-          return `<div class="calendar-item ${itemClass}"><b>${job.client}</b><br>${job.name}<br>${job.crew}</div>`;
-        }).join("")}
-      </article>
-    `;
-  }).join("");
+  const days = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+  let html = days.map(day => `<div class="calendar-day muted">${day}</div>`).join('');
+  for (let day = 1; day <= 31; day++) {
+    const dayEvents = data.events.filter(e => e.day === day).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+    const pills = dayEvents.map(e => `<div class="event ${e.color === 'blue' ? '' : (e.color || '')}" data-event-id="${e.id}" title="${esc(e.start || '')}–${esc(e.end || '')} · ${esc(e.location || '')}">${esc(e.title)}</div>`).join('');
+    html += `<div class="calendar-day ${day === TODAY_DAY ? 'today' : ''}" data-day="${day}">${day}${pills}</div>`;
+  }
+  $('#calendar-grid').innerHTML = html;
 }
-
-function renderTime() {
-  qs("#timeEntries").innerHTML = state.time.length ? state.time.map(entry => `
-    <div class="time-row">
-      <span><strong>${entry.person}</strong><br><span class="job-meta">${entry.job}</span></span>
-      <span>${entry.hours} h</span>
-      <span class="badge ${entry.status === "Approuvé" ? "progress" : "warn"}">${entry.status}</span>
-    </div>
-  `).join("") : emptyState("Aucune feuille de temps", "Les heures envoyées par les employés apparaîtront ici.");
+function openEventDialog(existingEvent, prefillDay) {
+  const form = $('#event-form');
+  form.reset();
+  if (existingEvent) {
+    form.id.value = existingEvent.id;
+    form.title.value = existingEvent.title;
+    form.location.value = existingEvent.location || '';
+    form.day.value = existingEvent.day;
+    form.start.value = existingEvent.start || '';
+    form.end.value = existingEvent.end || '';
+    form.color.value = existingEvent.color || 'blue';
+    $('#event-dialog-title').textContent = 'Modifier le rendez-vous';
+    $('#event-delete-button').hidden = false;
+  } else {
+    form.id.value = '';
+    form.day.value = prefillDay || TODAY_DAY;
+    $('#event-dialog-title').textContent = 'Ajouter un rendez-vous';
+    $('#event-delete-button').hidden = true;
+  }
+  $('#event-dialog').showModal();
 }
-
-function renderEmployeeTime() {
-  const employees = state.team.map(member => member.name);
-  const jobs = state.jobs.map(job => job.name);
-  const selectedPerson = qs("#employeeTimePerson")?.value || employees[0] || "";
-
-  qs("#employeeTimePerson").innerHTML = optionList(employees, selectedPerson, "Ajouter un employé");
-  qs("#employeeTimeJob").innerHTML = optionList(jobs, qs("#employeeTimeJob")?.value || jobs[0] || "", "Ajouter un job");
-
-  const rows = state.time.filter(entry => entry.person === (qs("#employeeTimePerson").value || selectedPerson));
-  const total = rows.reduce((sum, entry) => sum + entry.hours, 0);
-  qs("#employeeWeekTotal").textContent = `${total.toFixed(2).replace(".00", "")} h`;
-  qs("#employeeTimeList").innerHTML = rows.length ? rows.map(entry => `
-    <article class="employee-time-card">
-      <div>
-        <strong>${entry.job}</strong>
-        <span>${entry.status}</span>
-      </div>
-      <b>${entry.hours} h</b>
-    </article>
-  `).join("") : emptyState("Aucune heure entrée", "Les heures envoyées depuis ce formulaire seront listées ici.");
+function saveEvent(event) {
+  event.preventDefault();
+  const form = event.target;
+  const id = form.id.value;
+  const day = Math.min(31, Math.max(1, Number(form.day.value) || 1));
+  const payload = { day, start: form.start.value, end: form.end.value, title: form.title.value, location: form.location.value, color: form.color.value };
+  if (id) {
+    const index = data.events.findIndex(item => String(item.id) === id);
+    if (index > -1) data.events[index] = { ...data.events[index], ...payload };
+  } else {
+    data.events.push({ id: Date.now(), ...payload });
+  }
+  renderCalendar(); renderSchedule();
+  $('#event-dialog').close();
+  form.reset();
+  save('Rendez-vous sauvegardé');
 }
-
-function optionList(items, selected, placeholder = "Aucune option") {
-  if (!items.length) return `<option value="">${placeholder}</option>`;
-  return items.map(item => `<option ${item === selected ? "selected" : ""}>${item}</option>`).join("");
+function deleteEvent() {
+  const id = $('#event-form').id.value;
+  data.events = data.events.filter(item => String(item.id) !== id);
+  renderCalendar(); renderSchedule();
+  $('#event-dialog').close();
+  save('Rendez-vous supprimé');
 }
-
-function renderMileage() {
-  const employees = ["Tous", ...state.team.map(member => member.name)];
-  const vehicles = ["Tous", ...state.vehicles.map(vehicle => vehicle.label)];
-  const tripEmployees = state.team.map(member => member.name);
-  const tripVehicles = state.vehicles.map(vehicle => vehicle.label);
-  const tripJobs = state.jobs.map(job => job.name);
-
-  qs("#employeeFilter").innerHTML = optionList(employees, state.mileageEmployee);
-  qs("#vehicleFilter").innerHTML = optionList(vehicles, state.mileageVehicle);
-  qs("#tripEmployee").innerHTML = optionList(tripEmployees, tripEmployees[0], "Ajouter un employé");
-  qs("#tripVehicle").innerHTML = optionList(tripVehicles, tripVehicles[0], "Ajouter un véhicule");
-  qs("#tripJob").innerHTML = optionList(tripJobs, tripJobs[0], "Ajouter un job");
-
-  const rows = state.mileage.filter(trip => {
-    const employeeMatch = state.mileageEmployee === "Tous" || trip.employee === state.mileageEmployee;
-    const vehicleMatch = state.mileageVehicle === "Tous" || trip.vehicle === state.mileageVehicle;
-    return employeeMatch && vehicleMatch;
+function renderClients() {
+  const clients = [['Marie Tremblay','marie@exemple.ca','2','60 750 $'],['Simon Gagnon','simon@exemple.ca','1','96 500 $'],['Émilie Lavoie','emilie@exemple.ca','3','42 200 $'],['Alex Roy','alex@exemple.ca','1','27 900 $']];
+  $('#client-table').innerHTML = `<div class="client-row header"><span>CLIENT</span><span>CONTACT</span><span>CHANTIERS</span><span>VALEUR</span><span></span></div>${clients.map((client, i) => `<div class="client-row"><span class="client-person"><span class="avatar">${client[0].split(' ').map(n=>n[0]).join('')}</span>${client[0]}</span><span>${client[1]}</span><span>${client[2]}</span><span>${client[3]}</span><span>⋮</span></div>`).join('')}`;
+}
+function renderTeam() { const people = [['SM','Shawn Martin','Propriétaire'],['JD','Julien Dubois','Chef d’équipe'],['ML','Mélanie Leblanc','Designer'],['AP','Antoine Pelletier','Menuisier'],['KB','Karim Bouchard','Apprenti'],['SC','Sophie Côté','Administration']]; $('#team-cards').innerHTML = people.map(person => `<article class="team-card"><span class="avatar">${person[0]}</span><span><b>${person[1]}</b><small>${person[2]}</small></span></article>`).join(''); }
+function switchView(name) { document.querySelectorAll('.view').forEach(view => view.classList.toggle('active', view.id === name)); document.querySelectorAll('.nav-link[data-view]').forEach(link => link.classList.toggle('active', link.dataset.view === name)); $('#breadcrumb').textContent = document.querySelector(`.nav-link[data-view="${name}"]`)?.textContent.trim() || 'Vue d’ensemble'; $('.sidebar').classList.remove('open'); window.scrollTo({top: 0, behavior: 'smooth'}); }
+function addJob(event) { event.preventDefault(); const form = event.target; data.jobs.unshift({id: `job-${Date.now()}`, name: form.name.value, client: form.client.value, budget: `${Number(form.budget.value || 0).toLocaleString('fr-CA')} $`, progress: 0, color: 'blue', timeLog: []}); renderJobs(); $('#job-dialog').close(); form.reset(); save('Chantier créé et sauvegardé'); switchView('jobs'); }
+function addTask(event) { event.preventDefault(); const form = event.target; data.tasks.unshift({text: form.task.value, due: form.due.value || 'Aujourd’hui', done: false}); renderTasks(); $('#task-dialog').close(); form.reset(); save('Tâche ajoutée'); }
+function init() {
+  renderJobs(); renderTasks(); renderSchedule(); renderCalendar(); renderClients(); renderTeam();
+  document.querySelectorAll('[data-view], [data-go]').forEach(el => el.addEventListener('click', event => { event.preventDefault(); switchView(el.dataset.view || el.dataset.go); }));
+  ['#new-job-button','#new-job-button-2'].forEach(selector => $(selector).addEventListener('click', () => $('#job-dialog').showModal()));
+  $('#add-task-button').addEventListener('click', () => $('#task-dialog').showModal());
+  $('#new-event-button').addEventListener('click', () => openEventDialog(null));
+  $('#event-form').addEventListener('submit', saveEvent);
+  $('#event-delete-button').addEventListener('click', deleteEvent);
+  $('#calendar-grid').addEventListener('click', event => {
+    const pill = event.target.closest('[data-event-id]');
+    if (pill) { const found = data.events.find(item => String(item.id) === pill.dataset.eventId); if (found) openEventDialog(found); return; }
+    const cell = event.target.closest('[data-day]');
+    if (cell) openEventDialog(null, Number(cell.dataset.day));
   });
-  const proRows = rows.filter(trip => trip.type === "Professionnel");
-  const totalKm = proRows.reduce((sum, trip) => sum + trip.km, 0);
-  const reimbursement = totalKm * 0.70;
-
-  qs("#mileageMonth").textContent = `${totalKm.toFixed(1)} km`;
-  qs("#mileageReimbursement").textContent = money.format(reimbursement);
-  qs("#mileageTrips").textContent = String(proRows.length);
-  qs("#tripStatus").textContent = state.tripActive ? "Trajet GPS actif - enregistrement en cours." : "Aucun trajet en cours.";
-  qs("#finishTrip").disabled = !state.tripActive;
-
-  qs("#mileageTable").innerHTML = rows.length ? rows.map(trip => `
-    <tr>
-      <td>${trip.date}</td>
-      <td>${trip.employee}</td>
-      <td>${trip.vehicle}</td>
-      <td>${trip.job}</td>
-      <td>${trip.start}</td>
-      <td>${trip.end}</td>
-      <td><strong>${trip.km.toFixed(1)}</strong></td>
-      <td><span class="badge ${trip.type === "Professionnel" ? "progress" : "warn"}">${trip.type}</span></td>
-    </tr>
-  `).join("") : `<tr><td colspan="8">${emptyState("Aucun trajet", "Les trajets professionnels apparaîtront ici.")}</td></tr>`;
-}
-
-function renderDocuments() {
-  qs("#docGrid").innerHTML = state.jobs.length ? state.jobs.map(job => `
-    <article class="doc-card">
-      <h3>${job.client}</h3>
-      <p>${job.name}</p>
-      <a href="#" aria-label="Ouvrir ${job.drive}">${job.drive}</a>
-      <p class="job-meta">Contrat · Photos · Plans · Factures</p>
-    </article>
-  `).join("") : emptyState("Aucun document", "Les dossiers de projet seront liés aux jobs que tu crées.");
-}
-
-function renderAccounting() {
-  const rows = state.jobs.map(job => ({
-    label: job.name,
-    revenue: job.price,
-    cost: job.cost,
-    profit: job.price - job.cost
-  }));
-
-  qs("#financeRows").innerHTML = rows.length ? rows.map(row => `
-    <div class="finance-row">
-      <span><strong>${row.label}</strong><br><span class="job-meta">Coût ${money.format(row.cost)}</span></span>
-      <span>${money.format(row.profit)}</span>
-    </div>
-  `).join("") : emptyState("Aucune donnée financière", "Les marges et profits apparaîtront avec tes premiers jobs.");
-}
-
-function renderTeam() {
-  qs("#teamGrid").innerHTML = state.team.length ? state.team.map(member => `
-    <article class="team-card">
-      <h3>${member.name}</h3>
-      <p>${member.role}</p>
-      <div class="team-stats"><span>Heures</span><strong>${member.hours}</strong></div>
-      <div class="team-stats"><span>Jobs</span><strong>${member.jobs}</strong></div>
-      <div class="team-stats"><span>Accès</span><strong>${member.access}</strong></div>
-    </article>
-  `).join("") : emptyState("Aucun employé", "Ajoute tes employés quand la base de données sera branchée.");
-}
-
-function renderQuote() {
-  const data = Object.fromEntries(new FormData(qs("#quoteForm")).entries());
-  const materials = Number(data.materials);
-  const labor = Number(data.hours) * Number(data.rate);
-  const subs = Number(data.subs);
-  const travel = Number(data.travel);
-  const cost = materials + labor + subs + travel;
-  const subtotal = cost / (1 - Number(data.margin) / 100);
-  const tax = subtotal * (Number(data.tax) / 100);
-  const total = subtotal + tax;
-
-  qs("#quoteTotal").textContent = money.format(total);
-  qs("#quoteLines").innerHTML = [
-    ["Coût total", money.format(cost)],
-    ["Main-d'oeuvre", money.format(labor)],
-    ["Sous-total avant taxes", money.format(subtotal)],
-    ["Taxes", money.format(tax)]
-  ].map(([label, value]) => `<div><span>${label}</span><strong>${value}</strong></div>`).join("");
-
-  return { name: data.name, total, cost };
-}
-
-function renderAll() {
-  renderDashboard();
-  renderJobs();
-  renderCalendar();
-  renderTime();
-  renderEmployeeTime();
-  renderMileage();
-  renderDocuments();
-  renderAccounting();
-  renderTeam();
-  renderQuote();
-}
-
-function setView(view) {
-  qsa(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.view === view));
-  qsa(".view").forEach(section => section.classList.toggle("active", section.id === view));
-  qs("#viewTitle").textContent = titles[view];
-}
-
-qsa(".nav-item").forEach(item => item.addEventListener("click", () => setView(item.dataset.view)));
-qsa("[data-jump]").forEach(button => button.addEventListener("click", () => setView(button.dataset.jump)));
-qsa("[data-filter]").forEach(button => button.addEventListener("click", () => {
-  qsa("[data-filter]").forEach(item => item.classList.remove("active"));
-  button.classList.add("active");
-  state.filter = button.dataset.filter;
-  renderJobs();
-}));
-
-qs("#globalSearch").addEventListener("input", renderJobs);
-qs("#quoteForm").addEventListener("input", renderQuote);
-qs("#newJobBtn").addEventListener("click", () => qs("#jobDialog").showModal());
-qs("#closeJobDialog").addEventListener("click", () => qs("#jobDialog").close());
-qs("#cancelJobDialog").addEventListener("click", () => qs("#jobDialog").close());
-qs("#employeeTimePerson").addEventListener("change", renderEmployeeTime);
-qs("#employeeTimeForm").addEventListener("submit", async event => {
-  event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget).entries());
-  if (!data.person || !data.job) return;
-  try {
-    const saved = await createTimeEntryInSupabase(data);
-    state.time.unshift(saved || {
-      person: data.person,
-      job: data.job,
-      hours: Number(data.hours),
-      status: "À approuver",
-      note: data.note || ""
-    });
-  } catch (error) {
-    console.warn("Entrée locale seulement:", error);
-    state.time.unshift({
-      person: data.person,
-      job: data.job,
-      hours: Number(data.hours),
-      status: "À approuver",
-      note: data.note || ""
-    });
-    setDataStatus("Mode local - écriture Supabase refusée", false);
-  }
-  event.currentTarget.elements.note.value = "";
-  renderTime();
-  renderEmployeeTime();
-  renderDashboard();
-});
-qs("#employeeFilter").addEventListener("change", event => {
-  state.mileageEmployee = event.target.value;
-  renderMileage();
-});
-qs("#vehicleFilter").addEventListener("change", event => {
-  state.mileageVehicle = event.target.value;
-  renderMileage();
-});
-qs("#startTrip").addEventListener("click", () => {
-  if (!qs("#tripEmployee").value || !qs("#tripVehicle").value || !qs("#tripJob").value) return;
-  state.tripActive = true;
-  renderMileage();
-});
-qs("#finishTrip").addEventListener("click", () => {
-  if (!state.tripActive) return;
-  state.tripActive = false;
-  state.mileage.unshift({
-    date: "2026-07-11",
-    employee: qs("#tripEmployee").value,
-    vehicle: qs("#tripVehicle").value,
-    job: qs("#tripJob").value,
-    start: "Position GPS départ",
-    end: "Position GPS arrivée",
-    km: 14.7,
-    type: "Professionnel"
+  $('#settings-button').addEventListener('click', () => { const exportData = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'}); const link = Object.assign(document.createElement('a'), {href: URL.createObjectURL(exportData), download: 'atelier-ops-sauvegarde.json'}); link.click(); URL.revokeObjectURL(link.href); showToast('Sauvegarde JSON téléchargée'); });
+  $('#job-form').addEventListener('submit', addJob); $('#task-form').addEventListener('submit', addTask);
+  $('#task-list').addEventListener('change', event => { if (event.target.matches('[data-task]')) { data.tasks[event.target.dataset.task].done = event.target.checked; renderTasks(); save(); } });
+  $('#job-search').addEventListener('input', event => { const term = event.target.value.toLowerCase(); document.querySelectorAll('.project-card').forEach(card => card.hidden = !card.textContent.toLowerCase().includes(term)); });
+  $('#projects-grid').addEventListener('click', event => {
+    const timerBtn = event.target.closest('[data-timer-action]');
+    if (timerBtn) { if (timerBtn.dataset.timerAction === 'start') startTimer(timerBtn.dataset.jobId); else stopTimer(); return; }
+    const delBtn = event.target.closest('[data-delete-entry]');
+    if (delBtn) deleteTimerEntry(delBtn.dataset.jobId, delBtn.dataset.deleteEntry);
   });
-  state.mileageEmployee = "Tous";
-  state.mileageVehicle = "Tous";
-  renderMileage();
-});
-qs("#approveAll").addEventListener("click", () => {
-  state.time = state.time.map(entry => ({ ...entry, status: "Approuvé" }));
-  renderTime();
-  renderDashboard();
-});
-
-qs("#saveQuote").addEventListener("click", async event => {
-  event.preventDefault();
-  const quote = renderQuote();
-  try {
-    const saved = await createQuoteJobInSupabase(quote);
-    state.jobs.unshift(saved || {
-      id: Date.now(),
-      name: quote.name || "Job sans titre",
-      client: "Client à confirmer",
-      status: "Planifié",
-      date: "2026-07-20",
-      crew: "À assigner",
-      price: Math.round(quote.total),
-      cost: Math.round(quote.cost),
-      drive: "Dossier Drive à créer",
-      invoice: 0,
-      summary: "Job créé depuis le calculateur. Détails à compléter.",
-      documents: ["Devis généré"],
-      plans: ["Plan à ajouter"],
-      quotes: ["Prix calculé"],
-      photos: ["Photos à ajouter"],
-      log: ["Job créé depuis le calculateur."]
-    });
-  } catch (error) {
-    console.warn("Job local seulement:", error);
-    state.jobs.unshift({
-      id: Date.now(),
-      name: quote.name || "Job sans titre",
-      client: "Client à confirmer",
-      status: "Planifié",
-      date: "2026-07-20",
-      crew: "À assigner",
-      price: Math.round(quote.total),
-      cost: Math.round(quote.cost),
-      drive: "Dossier Drive à créer",
-      invoice: 0,
-      summary: "Job créé depuis le calculateur. Détails à compléter.",
-      documents: ["Devis généré"],
-      plans: ["Plan à ajouter"],
-      quotes: ["Prix calculé"],
-      photos: ["Photos à ajouter"],
-      log: ["Job créé depuis le calculateur."]
-    });
-    setDataStatus("Mode local - écriture Supabase refusée", false);
-  }
-  state.selectedJobId = state.jobs[0].id;
-  setView("jobs");
-  renderAll();
-});
-
-qs("#jobForm").addEventListener("submit", async event => {
-  const submitter = event.submitter;
-  if (submitter?.value === "cancel") return;
-  event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget).entries());
-  try {
-    const saved = await createJobInSupabase(data);
-    state.jobs.unshift(saved || {
-      id: Date.now(),
-      name: data.name,
-      client: data.client,
-      status: data.status,
-      date: data.date,
-      crew: "À assigner",
-      price: Number(data.price),
-      cost: Math.round(Number(data.price) * 0.64),
-      drive: `Dossier Drive / ${data.client}`,
-      invoice: data.status === "À facturer" ? Number(data.price) : 0,
-      summary: "Nouveau job ajouté au pipeline. Dossier à compléter.",
-      documents: ["Contrat à préparer"],
-      plans: ["Plan à ajouter"],
-      quotes: ["Devis à finaliser"],
-      photos: ["Photos initiales à ajouter"],
-      log: ["Job créé manuellement."]
-    });
-  } catch (error) {
-    console.warn("Job local seulement:", error);
-    state.jobs.unshift({
-      id: Date.now(),
-      name: data.name,
-      client: data.client,
-      status: data.status,
-      date: data.date,
-      crew: "À assigner",
-      price: Number(data.price),
-      cost: Math.round(Number(data.price) * 0.64),
-      drive: `Dossier Drive / ${data.client}`,
-      invoice: data.status === "À facturer" ? Number(data.price) : 0,
-      summary: "Nouveau job ajouté au pipeline. Dossier à compléter.",
-      documents: ["Contrat à préparer"],
-      plans: ["Plan à ajouter"],
-      quotes: ["Devis à finaliser"],
-      photos: ["Photos initiales à ajouter"],
-      log: ["Job créé manuellement."]
-    });
-    setDataStatus("Mode local - écriture Supabase refusée", false);
-  }
-  state.selectedJobId = state.jobs[0].id;
-  qs("#jobDialog").close();
-  event.currentTarget.reset();
-  setView("jobs");
-  renderAll();
-});
-
-qs("#exportJobs").addEventListener("click", () => {
-  const header = "job,client,statut,date,equipe,prix,marge";
-  const rows = state.jobs.map(job => [job.name, job.client, job.status, job.date, job.crew, job.price, `${margin(job)}%`].join(","));
-  const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "jobs.csv";
-  link.click();
-  URL.revokeObjectURL(link.href);
-});
-
-async function initApp() {
-  renderAll();
-  await loadFromSupabase();
-  renderAll();
+  setInterval(tick, 1000);
+  $('#menu-button').addEventListener('click', () => $('.sidebar').classList.toggle('open'));
 }
-
-if ("serviceWorker" in navigator && location.protocol !== "file:") {
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
-}
-
-initApp();
+init();
