@@ -141,6 +141,19 @@ create table if not exists public.calendar_events (
   created_at timestamptz not null default now()
 );
 
+-- calendar_events peut déjà exister (migration « atelier_ops_tasks_events_team_progress »,
+-- avec start_time/end_time en texte et une colonne color) : on complète sans rien retirer.
+alter table public.calendar_events
+  add column if not exists employee_id uuid references public.profiles(id) on delete set null,
+  add column if not exists kind text not null default 'Rendez-vous',
+  add column if not exists notes text;
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'calendar_events' and column_name = 'color') then
+    alter table public.calendar_events alter column color drop not null;
+  end if;
+end $$;
+
 create table if not exists public.app_settings (
   id int primary key default 1 check (id = 1),
   company_name text not null default 'Eizo Construction',
