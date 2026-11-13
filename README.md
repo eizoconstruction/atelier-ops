@@ -25,7 +25,7 @@ Elle fonctionne sur ordinateur et sur téléphone, et s'installe comme une app (
 ## Mise en ligne (une seule fois)
 
 ### 1. Réactiver Supabase
-Le projet `qjnuksrjdymakizznkiy` ne répondait plus le 13 novembre 2026. Il a probablement été mis en pause pour inactivité.
+Fait le 13 novembre 2026 : le projet était en pause, il a été réactivé et la migration 002 y est appliquée. Les projets gratuits se remettent en pause après environ 7 jours sans activité : si l'app affiche « Pas de connexion avec le serveur », vérifie ceci en premier.
 1. Va sur https://supabase.com/dashboard et ouvre le projet.
 2. S'il est en pause, clique **Restore project** et attends quelques minutes.
 

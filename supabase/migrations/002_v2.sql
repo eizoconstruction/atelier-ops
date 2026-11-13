@@ -298,3 +298,11 @@ create index if not exists mileage_employee_date on public.mileage_trips (employ
 create index if not exists job_expenses_job on public.job_expenses (job_id);
 create index if not exists job_files_job on public.job_files (job_id);
 create index if not exists events_date on public.calendar_events (event_date);
+
+-- ---------------------------------------------------------------------
+-- 8. Durcissement demandé par l'outil de sécurité de Supabase
+-- ---------------------------------------------------------------------
+alter function public.touch_updated_at() set search_path = public;
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function public.is_admin() from public, anon;
+grant execute on function public.is_admin() to authenticated;
