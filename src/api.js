@@ -41,7 +41,7 @@ function createSupabaseBackend() {
       async signIn(email, password) { return check(await sb.auth.signInWithPassword({ email, password })).session; },
       async signOut() { await sb.auth.signOut(); },
       async resetPassword(email) {
-        check(await sb.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/?reset=1` }));
+        check(await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin }));
       },
       async updatePassword(password) { check(await sb.auth.updateUser({ password })); },
       onChange(cb) { sb.auth.onAuthStateChange((event, session) => cb(event, session)); }

@@ -195,9 +195,8 @@ onStoreChange(() => {
   queueMicrotask(() => { pending = false; if (current?.mod.refreshOnChange !== false) render(); });
 });
 
-async function handlePasswordReset() {
-  // l'utilisateur arrive depuis le lien « mot de passe oublié »
-  if (!new URLSearchParams(location.search).has("reset")) return false;
+// L'utilisateur arrive depuis le lien « Mot de passe oublié » reçu par courriel
+async function askNewPassword() {
   await openForm({
     title: "Choisir un nouveau mot de passe",
     fields: [{ name: "password", label: "Nouveau mot de passe (8 caractères min.)", type: "password", required: true }],
@@ -207,8 +206,6 @@ async function handlePasswordReset() {
       toast("Mot de passe changé");
     }
   });
-  history.replaceState(null, "", location.pathname + location.hash);
-  return true;
 }
 
 async function bootstrap() {
@@ -219,11 +216,11 @@ async function bootstrap() {
   api.auth.onChange((event, session) => {
     if (event === "SIGNED_OUT") { store.me = null; showLogin(); }
     if (event === "TOKEN_REFRESHED" && session) store.session = session;
+    if (event === "PASSWORD_RECOVERY") setTimeout(askNewPassword, 300);
   });
   try {
     const session = await api.auth.session();
     if (session) {
-      await handlePasswordReset();
       await enterApp(session);
     } else showLogin();
   } catch (e) {
