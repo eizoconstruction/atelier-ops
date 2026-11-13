@@ -40,7 +40,7 @@ Fait le 13 novembre 2026 : le projet était en pause, il a été réactivé et l
 1. Sur https://vercel.com : **Add New** > **Project** > importe le dépôt GitHub `eizoconstruction/atelier-ops`.
 2. Vercel détecte Vite tout seul : build `npm run build`, dossier `dist`.
 3. (Facultatif) Dans **Environment Variables**, ajoute `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` (voir `.env.example`). Sans ces variables, l'app utilise le projet Supabase actuel.
-4. Dans Supabase, sous **Authentication** > **URL Configuration**, mets l'adresse Vercel dans *Site URL*. C'est ce qui fait fonctionner le lien « Mot de passe oublié ».
+4. Dans Supabase, sous **Authentication** > **URL Configuration**, l'adresse Vercel doit être dans *Site URL* (fait : https://atelier-ops-n2q9.vercel.app). C'est ce qui fait fonctionner le lien « Mot de passe oublié ».
 
 ### 4. Ton compte admin
 Le premier compte créé devient admin automatiquement. Si ton compte existait déjà avec le rôle admin, il le reste.
