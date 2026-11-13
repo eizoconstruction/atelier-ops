@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#10233f" />
+    <meta name="description" content="Atelier Ops — gestion simple de chantiers." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/styles.css" />
+    <style>dialog{width:min(450px,calc(100% - 28px))}</style>
+    <title>Atelier Ops</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#dashboard" aria-label="Atelier Ops, accueil"><span class="brand-mark">A</span><span>Atelier<br><b>Ops</b></span></a>
+        <nav aria-label="Navigation principale">
+          <a class="nav-link active" href="#dashboard" data-view="dashboard"><span>▦</span> Tableau de bord</a>
+          <a class="nav-link" href="#jobs" data-view="jobs"><span>⌂</span> Chantiers</a>
+          <a class="nav-link" href="#calendar" data-view="calendar"><span>□</span> Calendrier</a>
+          <a class="nav-link" href="#clients" data-view="clients"><span>♙</span> Clients</a>
+          <a class="nav-link" href="#estimates" data-view="estimates"><span>◇</span> Devis & factures</a>
+          <a class="nav-link" href="#team" data-view="team"><span>♧</span> Équipe</a>
+          <a class="nav-link" href="#gallery" data-view="gallery"><span>▧</span> Galerie</a>
+        </nav>
+        <div class="sidebar-bottom"><button class="nav-link plain" id="settings-button"><span>⚙</span> Paramètres</button><div class="profile"><span class="avatar small">SM</span><span><b>Shawn Martin</b><small>Administrateur</small></span></div></div>
+      </aside>
+      <main class="main-content">
+        <header class="topbar"><button class="menu-button" id="menu-button" aria-label="Ouvrir le menu">☰</button><div class="breadcrumb" id="breadcrumb">Vue d'ensemble</div><div class="top-actions"><button class="icon-button" aria-label="Notifications">♧<i></i></button><span class="avatar">SM</span></div></header>
+
+        <section class="view active" id="dashboard">
+          <div class="page-heading"><div><p class="eyebrow">Mardi 28 juillet</p><h1>Bonjour, Shawn <span>👋</span></h1><p>Voici ce qui se passe aujourd'hui.</p></div><button class="primary-button" id="new-job-button">＋ Nouveau chantier</button></div>
+          <div class="metrics">
+            <article class="metric-card"><span class="metric-icon blue">⌂</span><div><small>CHANTIERS ACTIFS</small><strong id="active-job-count">4</strong><em>↑ 2 ce mois-ci</em></div></article>
+            <article class="metric-card"><span class="metric-icon amber">◇</span><div><small>DEVIS EN ATTENTE</small><strong>3</strong><em>48 750 $ à confirmer</em></div></article>
+            <article class="metric-card"><span class="metric-icon green">$</span><div><small>REVENUS — JUILLET</small><strong>86 240 $</strong><em>↑ 14,2 % vs juin</em></div></article>
+            <article class="metric-card"><span class="metric-icon violet">◷</span><div><small>HEURES CETTE SEMAINE</small><strong>124 h</strong><em>6 membres actifs</em></div></article>
+          </div>
+          <div class="dashboard-grid">
+            <article class="panel schedule-panel"><div class="panel-title"><div><h2>Horaire d'aujourd'hui</h2><p>Les rendez-vous de votre équipe</p></div><button class="text-button" data-go="calendar">Voir le calendrier →</button></div><div class="schedule-list" id="schedule-list"></div></article>
+            <article class="panel task-panel"><div class="panel-title"><div><h2>À faire</h2><p>Les priorités du jour</p></div><button class="round-button" id="add-task-button" aria-label="Ajouter une tâche">＋</button></div><div class="task-list" id="task-list"></div></article>
+            <article class="panel jobs-panel"><div class="panel-title"><div><h2>Chantiers en cours</h2><p>Suivez l'avancement de vos projets</p></div><button class="text-button" data-go="jobs">Tout voir →</button></div><div class="job-list" id="job-list"></div></article>
+            <article class="panel revenue-panel"><div class="panel-title"><div><h2>Revenus</h2><p>Performance des 6 derniers mois</p></div><button class="select-button">Cette année⌄</button></div><div class="chart" aria-label="Graphique de revenus"><div class="chart-bars"><span style="height:34%"></span><span style="height:48%"></span><span style="height:39%"></span><span style="height:66%"></span><span style="height:58%"></span><span class="current" style="height:88%"></span></div><div class="chart-labels"><span>Fév</span><span>Mar</span><span>Avr</span><span>Mai</span><span>Juin</span><span>Juil</span></div></div><div class="chart-total"><span>Total encaissé</span><b>384 600 $</b><em>↑ 18,4 %</em></div></article>
+          </div>
+        </section>
+
+        <section class="view" id="jobs"><div class="page-heading"><div><p class="eyebrow">PROJETS</p><h1>Chantiers</h1><p>Vos projets, leur progression et les prochaines étapes.</p></div><button class="primary-button" id="new-job-button-2">＋ Nouveau chantier</button></div><div class="filter-row"><input class="search-input" placeholder="Rechercher un chantier…" id="job-search" /><button class="filter-button">Filtrer</button></div><div class="projects-grid" id="projects-grid"></div></section>
+        <section class="view" id="calendar"><div class="page-heading"><div><p class="eyebrow">PLANIFICATION</p><h1>Calendrier</h1><p>Coordonnez les rendez-vous et les équipes.</p></div><button class="primary-button" id="new-event-button">＋ Ajouter un rendez-vous</button></div><article class="panel calendar-panel"><div class="calendar-toolbar"><button class="select-button">‹</button><h2>Juillet 2026</h2><button class="select-button">›</button><button class="today-button">Aujourd'hui</button></div><div class="calendar-grid" id="calendar-grid"></div></article></section>
+        <section class="view" id="clients"><div class="page-heading"><div><p class="eyebrow">RELATIONS</p><h1>Clients</h1><p>Les coordonnées et l'historique de vos clients.</p></div><button class="primary-button">＋ Ajouter un client</button></div><article class="panel table-panel"><div class="filter-row"><input class="search-input" placeholder="Rechercher un client…" /></div><div class="client-table" id="client-table"></div></article></section>
+        <section class="view simple-view" id="estimates"><p class="eyebrow">FINANCES</p><h1>Devis & factures</h1><p>Centralisez vos documents commerciaux et vos paiements.</p><div class="empty-card"><span>◇</span><h2>Vos devis sont prêts à gérer</h2><p>Cette section est prête à être reliée à votre solution de facturation.</p><button class="primary-button">Créer un devis</button></div></section>
+        <section class="view simple-view" id="team"><p class="eyebrow">ÉQUIPE</p><h1>Équipe</h1><p>Visualisez vos employés, rôles et heures.</p><div class="team-cards" id="team-cards"></div></section>
+        <section class="view simple-view" id="gallery"><p class="eyebrow">PORTFOLIO</p><h1>Galerie de chantiers</h1><p>Photos avant, pendant et après vos réalisations.</p><div class="gallery-grid"><div class="gallery-item g1">Cuisine<br><small>Rénovation</small></div><div class="gallery-item g2">Terrasse<br><small>Aménagement</small></div><div class="gallery-item g3">Salle de bain<br><small>Rénovation</small></div></div></section>
+      </main>
+    </div>
+    <dialog id="job-dialog"><form method="dialog" id="job-form"><button class="dialog-close" value="cancel" aria-label="Fermer">×</button><p class="eyebrow">NOUVEAU PROJET</p><h2>Créer un chantier</h2><label>Nom du chantier<input required name="name" placeholder="ex. Rénovation cuisine — Tremblay" /></label><label>Client<input required name="client" placeholder="Nom du client" /></label><label>Budget estimé<input required name="budget" type="number" placeholder="0" /></label><div class="dialog-actions"><button value="cancel" class="secondary-button">Annuler</button><button value="default" class="primary-button">Créer le chantier</button></div></form></dialog>
+    <dialog id="task-dialog"><form method="dialog" id="task-form"><button class="dialog-close" value="cancel" aria-label="Fermer">×</button><p class="eyebrow">À FAIRE</p><h2>Ajouter une tâche</h2><label>Tâche<input required name="task" placeholder="Décrire la tâche" /></label><label>Échéance<input name="due" placeholder="Aujourd'hui" /></label><div class="dialog-actions"><button value="cancel" class="secondary-button">Annuler</button><button value="default" class="primary-button">Ajouter</button></div></form></dialog>
+    <dialog id="event-dialog"><form method="dialog" id="event-form"><button class="dialog-close" value="cancel" aria-label="Fermer">×</button><p class="eyebrow">CALENDRIER</p><h2 id="event-dialog-title">Ajouter un rendez-vous</h2><input type="hidden" name="id" /><label>Titre<input required name="title" placeholder="ex. Visite de chantier" /></label><label>Lieu / chantier<input name="location" placeholder="ex. Cuisine Tremblay" /></label><div class="dialog-row"><label>Jour du mois<input required name="day" type="number" min="1" max="31" placeholder="1-31" /></label><label>Couleur<select name="color"><option value="blue">Bleu</option><option value="green">Vert</option><option value="yellow">Jaune</option><option value="violet">Violet</option></select></label></div><div class="dialog-row"><label>Heure de début<input name="start" type="time" /></label><label>Heure de fin<input name="end" type="time" /></label></div><div class="dialog-actions"><button type="button" id="event-delete-button" class="secondary-button danger-button" hidden>Supprimer</button><button value="cancel" class="secondary-button">Annuler</button><button value="default" class="primary-button">Enregistrer</button></div></form></dialog>
+    <div class="toast" id="toast">Sauvegardé</div>
+    <script src="/app.js"></script>
+  </body>
+</html>
