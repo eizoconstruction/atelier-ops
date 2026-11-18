@@ -12,7 +12,7 @@ Elle fonctionne sur ordinateur et sur téléphone, et s'installe comme une app (
 | **Clients** | Fiches clients et historique des jobs | — |
 | **Estimation et devis** | Calculateur (matériaux, main-d'oeuvre, imprévus, marge, TPS/TVQ), lignes de devis, devis PDF imprimable, conversion en job | — |
 | **Calendrier** | Vue mensuelle des jobs et rendez-vous, agenda sur téléphone | Lecture |
-| **Feuilles de temps** | Approbation (individuelle ou en lot), refus, heures sup. au-delà de 40 h/sem., export pour la paie | — |
+| **Feuilles de temps** | Approbation (individuelle ou en lot), refus, heures sup. au-delà de 40 h/sem., coût de la main-d'oeuvre (salaires, vacances, DAS part employeur, CNESST), export pour la paie | — |
 | **Mes heures** | Pointage « Commencer / Terminer ma journée » ou saisie manuelle | Idem ; modification possible tant que ce n'est pas approuvé |
 | **Kilométrage** | Trajet GPS réel, odomètre ou saisie manuelle, registre mensuel exportable | Ses trajets |
 | **Documents** | Photos, plans, contrats, reçus téléversés par job, plus des liens Drive | Ajout de photos |

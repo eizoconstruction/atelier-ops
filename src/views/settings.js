@@ -1,4 +1,4 @@
-import { store, saveSettings, loadAll } from "../store.js";
+import { store, saveSettings, loadAll, PAYROLL_KEYS } from "../store.js";
 import { esc, toast, humanError, downloadCSV, today } from "../util.js";
 import { api } from "../api.js";
 
@@ -28,6 +28,18 @@ export default {
           ${field("quote_prefix", "Préfixe des devis")}
           ${field("invoice_prefix", "Préfixe des factures")}
         </div>
+        <h2>Charges sur les salaires (part employeur)</h2>
+        <p class="help">Servent au coût de la main-d'oeuvre dans les feuilles de temps, les jobs et la comptabilité. Taux 2026 par défaut ; vérifie-les chaque janvier.</p>
+        <div class="form-grid">
+          ${field("vacation_rate", "Vacances (% du salaire)", "number")}
+          ${field("rrq_rate", "RRQ (%)", "number")}
+          ${field("ae_rate", "Assurance-emploi, employeur (%)", "number")}
+          ${field("rqap_rate", "RQAP, employeur (%)", "number")}
+          ${field("fss_rate", "FSS (%)", "number")}
+          ${field("cnt_rate", "Normes du travail (%)", "number")}
+          ${field("cnesst_rate", "CNESST ($ par 100 $ de salaire)", "number")}
+        </div>
+        <p class="help">Le taux CNESST est sur ton avis de cotisation (taux de l'unité de classification). Vacances : 4 % la plupart du temps, 6 % après 3 ans de service.</p>
         <div class="btn-row"><button class="primary-btn" type="submit">Enregistrer</button></div>
       </form>
 
@@ -46,7 +58,7 @@ export default {
       e.preventDefault();
       const f = new FormData(e.target);
       const changes = {};
-      for (const [k, v] of f.entries()) changes[k] = ["tps_rate", "tvq_rate", "mileage_rate", "default_hourly_rate", "default_margin"].includes(k) ? Number(v) || 0 : v;
+      for (const [k, v] of f.entries()) changes[k] = ["tps_rate", "tvq_rate", "mileage_rate", "default_hourly_rate", "default_margin", ...PAYROLL_KEYS].includes(k) ? Number(v) || 0 : v;
       try { await saveSettings(changes); toast("Paramètres enregistrés"); } catch (err) { toast(humanError(err), "error"); }
     };
     el.querySelector("#backup").onclick = () => {

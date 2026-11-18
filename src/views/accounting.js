@@ -1,4 +1,4 @@
-import { store, jobFinancials, clientOf, statusTone, byId, jobName } from "../store.js";
+import { store, jobFinancials, clientOf, statusTone, byId, jobName, loadedHourly } from "../store.js";
 import { esc, money, money2, num, today, fmtShort, fmtMonth, emptyState, badge, sum, downloadCSV, daysBetween } from "../util.js";
 import { expenseForm } from "../forms.js";
 
@@ -25,7 +25,7 @@ function draw(el, ctx) {
   const expenses = store.job_expenses.filter(x => inPeriod(x.expense_date));
   const expTotal = sum(expenses, x => x.amount);
   const entries = store.time_entries.filter(e => inPeriod(e.work_date) && e.status !== "Refusé");
-  const labor = sum(entries, e => (Number(e.hours) || 0) * (Number(byId("profiles", e.employee_id)?.hourly_cost) || 0));
+  const labor = sum(entries, e => (Number(e.hours) || 0) * loadedHourly(byId("profiles", e.employee_id)));
   const kmCost = sum(store.mileage_trips.filter(t => inPeriod(t.trip_date) && t.trip_type === "Professionnel"), t => t.distance_km) * rate;
   const costs = expTotal + labor + kmCost;
   const tps = revenue * (Number(s.tps_rate) / 100);
@@ -55,7 +55,7 @@ function draw(el, ctx) {
 
     <div class="tabs">${[["jobs", "Rentabilité par job"], ["ar", "Comptes à recevoir"], ["exp", "Dépenses"], ["tax", "Taxes"]].map(([k, l]) => `<button class="tab ${ui.tab === k ? "active" : ""}" data-tab="${k}">${l}</button>`).join("")}</div>
     <section class="panel flush" id="accBody"></section>
-    <p class="help">Les coûts de main-d'oeuvre utilisent le coût horaire de chaque employé (Employés et véhicules). Les montants servent au suivi de gestion ; la comptabilité officielle reste dans QuickBooks.</p>`;
+    <p class="help">Les coûts de main-d'oeuvre utilisent le taux horaire de chaque employé (Employés et véhicules), plus les vacances, les DAS (part employeur) et la CNESST (Paramètres). Les montants servent au suivi de gestion ; la comptabilité officielle reste dans QuickBooks.</p>`;
 
   const body = el.querySelector("#accBody");
   if (ui.tab === "jobs") {
