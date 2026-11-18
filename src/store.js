@@ -19,7 +19,37 @@ export const EVENT_KINDS = ["Rendez-vous", "Livraison", "Inspection", "Visite", 
 
 const TABLES = ["profiles", "clients", "jobs", "time_entries", "vehicles", "mileage_trips", "job_expenses", "job_files", "job_log_entries", "quotes", "calendar_events", "app_settings"];
 
-const DEFAULT_SETTINGS = { id: 1, company_name: "Eizo Construction", tps_rate: 5, tvq_rate: 9.975, mileage_rate: 0.7, default_margin: 25, default_hourly_rate: 75, quote_prefix: "D-", invoice_prefix: "F-" };
+const DEFAULT_SETTINGS = {
+  id: 1, company_name: "Eizo Construction", tps_rate: 5, tvq_rate: 9.975, mileage_rate: 0.7, default_margin: 25, default_hourly_rate: 75, quote_prefix: "D-", invoice_prefix: "F-",
+  // charges sociales, part employeur (taux 2026, Québec)
+  rrq_rate: 6.3, ae_rate: 1.82, rqap_rate: 0.602, fss_rate: 1.65, cnt_rate: 0.06, cnesst_rate: 0, vacation_rate: 4
+};
+
+// ---- coût de la main-d'oeuvre : salaire + DAS (part employeur) + CNESST ----
+export const DAS_ITEMS = [
+  { key: "rrq_rate", label: "RRQ" },
+  { key: "ae_rate", label: "Assurance-emploi" },
+  { key: "rqap_rate", label: "RQAP" },
+  { key: "fss_rate", label: "FSS" },
+  { key: "cnt_rate", label: "Normes du travail (CNT)" }
+];
+export const PAYROLL_KEYS = [...DAS_ITEMS.map(d => d.key), "cnesst_rate", "vacation_rate"];
+const rateOf = k => {
+  const v = store.settings[k];
+  return v === null || v === undefined || v === "" ? DEFAULT_SETTINGS[k] : Number(v) || 0;
+};
+// gross = salaire brut (heures x taux, prime d'heures sup. incluse) ; les vacances et les charges s'ajoutent par-dessus
+export function laborBreakdown(gross) {
+  const vacation = gross * rateOf("vacation_rate") / 100;
+  const wages = gross + vacation;
+  const das = DAS_ITEMS.map(d => ({ ...d, rate: rateOf(d.key), amount: wages * rateOf(d.key) / 100 }));
+  const dasTotal = sum(das, d => d.amount);
+  const cnesst = wages * rateOf("cnesst_rate") / 100;
+  return { gross, vacation, wages, das, dasTotal, cnesst, total: wages + dasTotal + cnesst };
+}
+// multiplicateur appliqué au taux horaire pour obtenir le coût réel d'une heure
+export const laborFactor = () => laborBreakdown(1).total;
+export const loadedHourly = profile => (Number(profile?.hourly_cost) || 0) * laborFactor();
 
 export const store = {
   me: null,          // profil connecté
@@ -129,7 +159,7 @@ export function jobFinancials(job) {
   const rate = Number(store.settings.mileage_rate) || 0.7;
   const entries = store.time_entries.filter(e => e.job_id === job.id && e.status !== "Refusé");
   const hours = sum(entries, e => e.hours);
-  const labor = sum(entries, e => (Number(e.hours) || 0) * (Number(byId("profiles", e.employee_id)?.hourly_cost) || 0));
+  const labor = sum(entries, e => (Number(e.hours) || 0) * loadedHourly(byId("profiles", e.employee_id)));
   const expenses = sum(store.job_expenses.filter(x => x.job_id === job.id), x => x.amount);
   const km = sum(store.mileage_trips.filter(t => t.job_id === job.id && t.trip_type === "Professionnel"), t => t.distance_km);
   const mileage = km * rate;

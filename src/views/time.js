@@ -1,5 +1,5 @@
-import { store, patchMany, statusTone, entryPerson, entryJob, employeeOptions, byId } from "../store.js";
-import { esc, num, money, startOfWeek, addDays, today, fmtShort, fmtDate, emptyState, badge, sum, toast, downloadCSV, humanError, hhmm, groupBy } from "../util.js";
+import { store, patchMany, statusTone, entryPerson, entryJob, employeeOptions, byId, laborBreakdown, DAS_ITEMS } from "../store.js";
+import { esc, num, money, money2, startOfWeek, addDays, today, fmtShort, fmtDate, emptyState, badge, sum, toast, downloadCSV, humanError, hhmm, groupBy } from "../util.js";
 import { timeForm } from "../forms.js";
 
 const ui = { from: startOfWeek(), weeks: 1, employee: "", status: "", selected: new Set() };
@@ -28,8 +28,18 @@ function draw(el, { go, actions }) {
     // heures sup. : au-delà de 40 h par semaine (Normes du travail du Québec)
     const perWeek = groupBy(es, e => startOfWeek(e.work_date));
     const overtime = sum(Object.values(perWeek), w => Math.max(0, sum(w, e => e.hours) - 40));
-    return { name, total, approved: sum(es.filter(e => e.status === "Approuvé"), e => e.hours), overtime, cost: total * rate };
+    // salaire brut : heures x taux + prime de 50 % sur les heures sup.
+    const lb = laborBreakdown((total + overtime * 0.5) * rate);
+    return { name, total, approved: sum(es.filter(e => e.status === "Approuvé"), e => e.hours), overtime, rate, lb, cost: lb.total };
   }).sort((a, b) => a.name.localeCompare(b.name));
+
+  // totaux de la période
+  const tot = k => sum(summary, s => s.lb[k]);
+  const ref = laborBreakdown(100); // taux en vigueur
+  const dasByItem = DAS_ITEMS.map((d, i) => ({ label: d.label, rate: ref.das[i].rate, amount: sum(summary, s => s.lb.das[i].amount) }));
+  const cnesstRate = ref.cnesst / ref.wages * 100;
+  const vacRate = ref.vacation;
+  const noRate = summary.filter(s => !s.rate).map(s => s.name);
 
   el.innerHTML = `
     <div class="toolbar">
@@ -44,11 +54,30 @@ function draw(el, { go, actions }) {
     <div class="kpis small">
       <div class="kpi"><span>Total</span><strong>${num(sum(rows.filter(r => r.status !== "Refusé"), r => r.hours))} h</strong></div>
       <div class="kpi"><span>À approuver</span><strong>${num(sum(pending, r => r.hours))} h</strong><small>${pending.length} entrée(s)</small></div>
-      <div class="kpi"><span>Coût main-d'oeuvre</span><strong>${money(sum(summary, s => s.cost))}</strong><small>selon coûts horaires</small></div>
+      <div class="kpi"><span>Coût total main-d'oeuvre</span><strong>${money(tot("total"))}</strong><small>salaires + DAS + CNESST</small></div>
     </div>
 
-    ${summary.length ? `<section class="panel"><h3>Par employé</h3><div class="table-wrap"><table class="table compact"><thead><tr><th>Employé</th><th class="num">Heures</th><th class="num">Approuvées</th><th class="num">Heures sup. (&gt;40 h/sem.)</th><th class="num">Coût</th></tr></thead>
-      <tbody>${summary.map(s => `<tr><td>${esc(s.name)}</td><td class="num">${num(s.total, 2)}</td><td class="num">${num(s.approved, 2)}</td><td class="num ${s.overtime ? "neg" : ""}">${num(s.overtime, 2)}</td><td class="num">${money(s.cost)}</td></tr>`).join("")}</tbody></table></div></section>` : ""}
+    ${summary.length ? `<section class="panel">
+      <h3>Coût de la main-d'oeuvre</h3>
+      <div class="kpis small">
+        <div class="kpi"><span>Salaires bruts</span><strong>${money2(tot("wages"))}</strong><small>dont vacances ${money2(tot("vacation"))}</small></div>
+        <div class="kpi"><span>DAS (part employeur)</span><strong>${money2(tot("dasTotal"))}</strong><small>RRQ, AE, RQAP, FSS, CNT</small></div>
+        <div class="kpi"><span>CNESST</span><strong>${money2(tot("cnesst"))}</strong><small>${cnesstRate ? `${num(cnesstRate, 4)} $ / 100 $` : `<span class="neg">taux à entrer dans Paramètres</span>`}</small></div>
+        <div class="kpi"><span>Coût total</span><strong>${money2(tot("total"))}</strong><small>${tot("wages") ? `+${num((tot("total") / tot("wages") - 1) * 100, 1)} % sur les salaires` : ""}</small></div>
+      </div>
+      <div class="table-wrap"><table class="table compact"><thead><tr><th>Détail</th><th class="num">Taux</th><th class="num">Montant</th></tr></thead><tbody>
+        <tr><td>Salaire (heures x taux, prime d'heures sup. incluse)</td><td class="num"></td><td class="num">${money2(tot("gross"))}</td></tr>
+        <tr><td>Vacances</td><td class="num">${num(vacRate, 2)} %</td><td class="num">${money2(tot("vacation"))}</td></tr>
+        ${dasByItem.map(d => `<tr><td>DAS — ${esc(d.label)}</td><td class="num">${num(d.rate, 3)} %</td><td class="num">${money2(d.amount)}</td></tr>`).join("")}
+        <tr><td>CNESST</td><td class="num">${num(cnesstRate, 4)} %</td><td class="num">${money2(tot("cnesst"))}</td></tr>
+        <tr><th>Total</th><th></th><th class="num">${money2(tot("total"))}</th></tr>
+      </tbody></table></div>
+      ${noRate.length ? `<p class="note warn">Aucun taux horaire pour : ${noRate.map(esc).join(", ")}. Ajoute-le dans Employés et véhicules.</p>` : ""}
+      <p class="help">Estimation pour la gestion : part employeur seulement (les retenues de l'employé et l'impôt ne sont pas un coût pour toi). Les plafonds annuels (RRQ, AE, RQAP) et l'exemption RRQ ne sont pas appliqués, donc le montant est un peu plus élevé que la réalité en fin d'année. Taux dans Paramètres.</p>
+    </section>` : ""}
+
+    ${summary.length ? `<section class="panel"><h3>Par employé</h3><div class="table-wrap"><table class="table compact"><thead><tr><th>Employé</th><th class="num">Heures</th><th class="num">Approuvées</th><th class="num">Heures sup. (&gt;40 h/sem.)</th><th class="num">Salaire brut</th><th class="num">DAS</th><th class="num">CNESST</th><th class="num">Coût total</th></tr></thead>
+      <tbody>${summary.map(s => `<tr><td>${esc(s.name)}</td><td class="num">${num(s.total, 2)}</td><td class="num">${num(s.approved, 2)}</td><td class="num ${s.overtime ? "neg" : ""}">${num(s.overtime, 2)}</td><td class="num">${money2(s.lb.wages)}</td><td class="num">${money2(s.lb.dasTotal)}</td><td class="num">${money2(s.lb.cnesst)}</td><td class="num"><b>${money2(s.cost)}</b></td></tr>`).join("")}</tbody></table></div></section>` : ""}
 
     <section class="panel flush">
       <div class="panel-head pad">
@@ -95,7 +124,13 @@ function draw(el, { go, actions }) {
     ["Date", "Employé", "Job", "Arrivée", "Départ", "Pause (min)", "Heures", "Statut", "Note"],
     ...rows.slice().reverse().map(e => [e.work_date, entryPerson(e), entryJob(e), hhmm(e.start_time), hhmm(e.end_time), e.break_minutes || 0, e.hours, e.status, e.notes || ""]),
     [],
-    ["Résumé", "Employé", "", "", "", "", "Heures", "Heures sup.", "Coût"],
-    ...summary.map(s => ["", s.name, "", "", "", "", s.total, s.overtime, s.cost.toFixed(2)])
+    ["Résumé", "Employé", "Taux horaire", "Salaire brut (vacances incl.)", "DAS employeur", "CNESST", "Heures", "Heures sup.", "Coût total"],
+    ...summary.map(s => ["", s.name, s.rate, s.lb.wages.toFixed(2), s.lb.dasTotal.toFixed(2), s.lb.cnesst.toFixed(2), s.total, s.overtime, s.cost.toFixed(2)]),
+    [],
+    ["Détail des charges", "", "Taux (%)", "Montant"],
+    ["", "Vacances", vacRate, tot("vacation").toFixed(2)],
+    ...dasByItem.map(d => ["", `DAS — ${d.label}`, d.rate, d.amount.toFixed(2)]),
+    ["", "CNESST", cnesstRate, tot("cnesst").toFixed(2)],
+    ["", "Total", "", tot("total").toFixed(2)]
   ]);
 }

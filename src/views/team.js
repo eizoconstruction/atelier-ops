@@ -27,7 +27,7 @@ function draw(el, ctx) {
           <span class="team-stats">
             ${badge(p.role === "admin" ? "Admin" : "Employé", p.role === "admin" ? "invoice" : "plan")}
             ${p.active === false ? badge("Désactivé", "muted") : ""}
-            <small>${num(wk)} h cette sem. · ${jobs} job(s) · ${Number(p.hourly_cost) ? `${money2(p.hourly_cost)}/h` : "<span class='neg'>coût horaire ?</span>"}</small>
+            <small>${num(wk)} h cette sem. · ${jobs} job(s) · ${Number(p.hourly_cost) ? `${money2(p.hourly_cost)}/h` : "<span class='neg'>taux horaire ?</span>"}</small>
           </span>
         </button>`;
       }).join("")}</div>
@@ -54,7 +54,7 @@ function employeeForm(p) {
       { name: "title", label: "Poste", placeholder: "ex. Charpentier-menuisier" },
       { name: "phone", label: "Téléphone", type: "tel" },
       { name: "email", label: "Courriel (connexion)", type: "email", help: "Le courriel de connexion se change dans Supabase > Authentication." },
-      { name: "hourly_cost", label: "Coût horaire ($/h)", type: "number", step: "0.01", min: 0, help: "Salaire + charges sociales (environ +15 à 20 %). Sert au calcul des marges, n'est jamais montré aux employés." },
+      { name: "hourly_cost", label: "Taux horaire ($/h)", type: "number", step: "0.01", min: 0, help: "Salaire horaire brut. Les vacances, les DAS et la CNESST sont ajoutés automatiquement (Paramètres). N'est jamais montré aux employés." },
       { name: "role", label: "Accès", type: "select", placeholder: false, options: [{ value: "employee", label: "Employé (ses heures, ses trajets)" }, { value: "admin", label: "Administrateur (tout)" }] },
       { name: "active", label: "Compte actif (décocher pour bloquer l'accès sans effacer l'historique)", type: "checkbox", full: true }
     ],
@@ -72,7 +72,7 @@ function addEmployeeHelp() {
   return openForm({
     title: "Ajouter un employé",
     fields: demo
-      ? [{ name: "full_name", label: "Nom complet", required: true }, { name: "email", label: "Courriel", type: "email" }, { name: "title", label: "Poste" }, { name: "hourly_cost", label: "Coût horaire ($/h)", type: "number", step: "0.01" }]
+      ? [{ name: "full_name", label: "Nom complet", required: true }, { name: "email", label: "Courriel", type: "email" }, { name: "title", label: "Poste" }, { name: "hourly_cost", label: "Taux horaire ($/h)", type: "number", step: "0.01" }]
       : [{ name: "info", label: "Étapes", type: "static", full: true, default: STEPS }],
     submitLabel: demo ? "Ajouter" : "Compris",
     onSubmit: async d => {
